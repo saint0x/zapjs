@@ -1,0 +1,82 @@
+use clap::Parser;
+use std::fs;
+use std::path::PathBuf;
+use zap_codegen::{generate_typescript_definitions, generate_typescript_runtime};
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "zap-codegen",
+    about = "Generate TypeScript bindings from Rust #[zap::export] functions"
+)]
+struct Args {
+    /// Path to the Cargo project
+    #[arg(short, long, default_value = ".")]
+    project_dir: PathBuf,
+
+    /// Output directory for generated TypeScript files
+    #[arg(short, long, default_value = "./src/api")]
+    output_dir: PathBuf,
+
+    /// Input JSON file with exported function metadata
+    #[arg(short, long)]
+    input: Option<PathBuf>,
+
+    /// Generate type definitions (.d.ts)
+    #[arg(long, default_value_t = true)]
+    definitions: bool,
+
+    /// Generate runtime bindings (.ts)
+    #[arg(long, default_value_t = true)]
+    runtime: bool,
+}
+
+fn main() -> anyhow::Result<()> {
+    let args = Args::parse();
+
+    // Create output directory if it doesn't exist
+    fs::create_dir_all(&args.output_dir)?;
+
+    // Load exported functions from input file or generate from source
+    let functions = if let Some(input_path) = args.input {
+        let json_content = fs::read_to_string(&input_path)?;
+        serde_json::from_str(&json_content)?
+    } else {
+        // For now, generate empty list - in production this would scan Rust source
+        // and extract #[zap::export] functions
+        // This would require parsing Rust code which is complex
+        eprintln!("Warning: No input file specified, generating empty exports");
+        eprintln!("Use --input <file> to specify a JSON file with exported functions");
+        vec![]
+    };
+
+    // Generate TypeScript definitions
+    if args.definitions {
+        let defs = generate_typescript_definitions(&functions);
+        let defs_path = args.output_dir.join("backend.d.ts");
+        fs::write(&defs_path, defs)?;
+        println!("Generated: {}", defs_path.display());
+    }
+
+    // Generate runtime bindings
+    if args.runtime {
+        let runtime = generate_typescript_runtime(&functions);
+        let runtime_path = args.output_dir.join("backend.ts");
+        fs::write(&runtime_path, runtime)?;
+        println!("Generated: {}", runtime_path.display());
+    }
+
+    println!("Successfully generated TypeScript bindings for {} functions", functions.len());
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_args_parsing() {
+        let args = Args::parse_from(&["zap-codegen"]);
+        assert_eq!(args.project_dir, PathBuf::from("."));
+        assert_eq!(args.output_dir, PathBuf::from("./src/api"));
+    }
+}

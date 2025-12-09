@@ -1,63 +1,53 @@
 {
-  "name": "zap-rs",
-  "version": "2.0.0",
-  "description": "Ultra-fast HTTP framework written in Rust with TypeScript bindings - IPC-based architecture",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    }
-  },
+  "name": "zap-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZapRS - Fullstack Rust + React framework",
+  "workspaces": [
+    "packages/runtime",
+    "packages/cli",
+    "packages/dev-server",
+    "packages/create-zap-app"
+  ],
   "scripts": {
-    "build:rust": "cargo build --release --bin zap",
-    "build:ts": "tsc",
     "build": "npm run build:rust && npm run build:ts",
-    "dev": "bun run src/index.ts",
-    "test": "cargo test && bun test tests/",
+    "build:rust": "cargo build --release --workspace",
+    "build:ts": "tsc -p packages/runtime/tsconfig.json",
+    "dev": "bun run packages/runtime/src/index.ts",
+    "test": "cargo test --workspace && bun test tests/",
     "test:integration": "bun test tests/integration/",
     "test:unit": "bun test tests/unit/",
-    "lint": "bun run tsc --noEmit",
-    "format": "prettier --write src/ server/src/",
-    "stress-test": "bun run stress-test.ts",
-    "stress-test:quick": "bun run stress-test.ts --quick",
-    "install-deps": "bun install",
-    "prepublishOnly": "npm run build"
+    "test:rust": "cargo test --workspace",
+    "test:ts": "bun test tests/",
+    "lint": "tsc --noEmit",
+    "format": "prettier --write 'packages/**/*.{ts,js,json}' 'src/**/*.{rs,toml}'",
+    "clean": "rm -rf target dist packages/*/dist packages/*/node_modules",
+    "install-deps": "bun install"
   },
   "keywords": [
     "rust",
     "http",
     "framework",
     "typescript",
+    "react",
+    "fullstack",
+    "server-functions",
     "performance",
-    "web-server",
-    "fast",
-    "ipc",
-    "bun"
+    "web-server"
   ],
   "author": "saint0x",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/saint0x/zap-rs.git"
-  },
-  "bugs": {
-    "url": "https://github.com/saint0x/zap-rs/issues"
-  },
-  "homepage": "https://github.com/saint0x/zap-rs#readme",
-  "devDependencies": {
-    "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
-  },
-  "dependencies": {
-    "chalk": "^4.1.2",
-    "commander": "^9.4.1",
-    "zap-rs": "^1.1.6"
+    "url": "https://github.com/saint0x/zapjs.git"
   },
   "engines": {
     "node": ">=16.0.0",
     "bun": ">=1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "prettier": "^3.0.0"
   }
 }

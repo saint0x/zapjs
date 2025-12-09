@@ -1,8 +1,8 @@
-# ⚡ Zap
+# 🚀 ZapRS - Fullstack Rust + React Framework
 
-Ultra-fast HTTP framework written in Rust with TypeScript bindings using Unix domain socket IPC.
+**A modern fullstack framework combining ultra-fast Rust backend with React frontend, featuring seamless server functions, automatic TypeScript bindings, and zero-config development.**
 
-Production-grade server combining Rust performance with TypeScript flexibility.
+**Status:** Phase 3 - CLI Tool Implementation (Alpha)
 
 ## Architecture
 

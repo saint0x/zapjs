@@ -1,7 +1,9 @@
 [workspace]
 members = [
-    "core",
-    "server"
+    "packages/core",
+    "packages/server",
+    "packages/macros",
+    "packages/codegen"
 ]
 resolver = "2"
 
