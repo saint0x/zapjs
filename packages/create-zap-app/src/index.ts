@@ -6,8 +6,10 @@ import inquirer from 'inquirer';
 import ora from 'ora';
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
-import { ensureDirSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
 import { join, resolve } from 'path';
+
+const { ensureDirSync, writeFileSync } = fsExtra;
 
 interface CreateOptions {
   template?: string;

@@ -63,8 +63,10 @@ export class RouteWatcher {
       console.error('[RouteWatcher] Error:', error);
     });
 
-    // Initial scan
-    this.triggerCallback();
+    // Initial scan (skip if routes are already known)
+    if (!this.options.skipInitial) {
+      this.triggerCallback();
+    }
   }
 
   /**

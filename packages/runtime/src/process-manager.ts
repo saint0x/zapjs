@@ -166,14 +166,7 @@ export class ProcessManager {
         console.error(`[Zap] ❌ Process error:`, err);
       });
 
-      // Wait for the server to be healthy
-      await this.waitForHealthy(
-        config.hostname,
-        config.port,
-        config.health_check_path || "/health"
-      );
-
-      console.log(`[Zap] ✅ Server ready on http://${config.hostname}:${config.port}`);
+      console.log(`[Zap] ✅ Server started on http://${config.hostname}:${config.port}`);
     } catch (error) {
       // Clean up on error
       await this.stop();
@@ -219,7 +212,7 @@ export class ProcessManager {
   }
 
   /**
-   * Stop the server process gracefully
+   * Stop the server process immediately
    */
   async stop(): Promise<void> {
     if (!this.process) {
@@ -234,40 +227,20 @@ export class ProcessManager {
       return;
     }
 
-    return new Promise((resolve) => {
-      if (!this.process) {
-        resolve();
-        return;
+    // Kill immediately
+    if (!this.process.killed) {
+      this.process.kill("SIGKILL");
+    }
+    this.process = null;
+
+    // Clean up config file
+    if (this.configPath && existsSync(this.configPath)) {
+      try {
+        unlinkSync(this.configPath);
+      } catch (e) {
+        // Ignore cleanup errors
       }
-
-      // Set up timeout for forceful termination
-      const forceTimeout = setTimeout(() => {
-        console.log("[Zap] ⚠️  Force killing process (SIGKILL)");
-        if (this.process && !this.process.killed) {
-          this.process.kill("SIGKILL");
-        }
-      }, 5000);
-
-      this.process.once("exit", () => {
-        clearTimeout(forceTimeout);
-        this.process = null;
-
-        // Clean up config file
-        if (this.configPath && existsSync(this.configPath)) {
-          try {
-            unlinkSync(this.configPath);
-          } catch (e) {
-            // Ignore cleanup errors
-          }
-        }
-
-        resolve();
-      });
-
-      // Initiate graceful shutdown
-      console.log("[Zap] 📛 Shutting down gracefully...");
-      this.process.kill("SIGTERM");
-    });
+    }
   }
 
   /**

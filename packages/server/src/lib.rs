@@ -109,6 +109,9 @@ pub use r#static::{StaticHandler, StaticOptions};
 // Re-export important types from core crate for convenience
 pub use zap_core::{Method, StatusCode};
 
+// Re-export macros for #[zap::export] syntax
+pub use zap_macros::export;
+
 #[cfg(test)]
 mod tests {
     use super::*;

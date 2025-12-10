@@ -149,9 +149,10 @@ impl IpcClient {
 
     /// Receive a message from the IPC channel
     pub async fn recv_message(&mut self) -> ZapResult<Option<IpcMessage>> {
+        use tokio::io::AsyncBufReadExt;
+
         let mut buffer = String::new();
-        let (reader, _writer) = self.stream.split();
-        let mut buf_reader = BufReader::new(reader);
+        let mut buf_reader = BufReader::new(&mut self.stream);
 
         let bytes_read = buf_reader
             .read_line(&mut buffer)

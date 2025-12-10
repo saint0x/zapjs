@@ -1,5 +1,7 @@
 import { EventEmitter } from 'events';
 import path from 'path';
+import { tmpdir } from 'os';
+import { pathToFileURL } from 'url';
 import chalk from 'chalk';
 import ora, { Ora } from 'ora';
 import { FileWatcher, WatchEvent } from './watcher.js';
@@ -8,6 +10,21 @@ import { ViteProxy } from './vite-proxy.js';
 import { CodegenRunner } from './codegen-runner.js';
 import { HotReloadServer } from './hot-reload.js';
 import { RouteScannerRunner } from './route-scanner.js';
+import { ProcessManager, IpcServer, ZapConfig, RouteConfig } from '@zapjs/runtime';
+
+// Register tsx loader for TypeScript imports
+// This must be called before any dynamic imports of .ts files
+let tsxRegistered = false;
+async function ensureTsxRegistered(): Promise<void> {
+  if (tsxRegistered) return;
+  try {
+    const tsx = await import('tsx/esm/api');
+    tsx.register();
+    tsxRegistered = true;
+  } catch {
+    // tsx not available, TypeScript imports won't work
+  }
+}
 
 export interface DevServerConfig {
   projectDir: string;
@@ -18,6 +35,10 @@ export interface DevServerConfig {
   release?: boolean;
   skipInitialBuild?: boolean;
   openBrowser?: boolean;
+  /** Path to pre-built zap binary (skips Rust compilation) */
+  binaryPath?: string;
+  /** Path to pre-built zap-codegen binary */
+  codegenBinaryPath?: string;
 }
 
 interface ServerState {
@@ -25,6 +46,24 @@ interface ServerState {
   rustReady: boolean;
   viteReady: boolean;
   lastError: string | null;
+}
+
+// Route tree type from route scanner
+interface ApiRoute {
+  filePath: string;
+  relativePath: string;
+  urlPath: string;
+  type: string;
+  params: Array<{ name: string; index: number; catchAll: boolean }>;
+  methods?: string[];
+  isIndex: boolean;
+}
+
+interface RouteTree {
+  routes: Array<{ filePath: string; urlPath: string }>;
+  apiRoutes: ApiRoute[];
+  layouts: unknown[];
+  root: unknown;
 }
 
 /**
@@ -55,6 +94,13 @@ export class DevServer extends EventEmitter {
   private hotReloadServer: HotReloadServer;
   private routeScanner: RouteScannerRunner;
 
+  // Runtime components for Rust server + IPC
+  private processManager: ProcessManager | null = null;
+  private ipcServer: IpcServer | null = null;
+  private socketPath: string = '';
+  private currentRouteTree: RouteTree | null = null;
+  private registeredHandlers: Map<string, string> = new Map(); // handlerId -> filePath
+
   // UI
   private spinner: Ora;
 
@@ -74,6 +120,11 @@ export class DevServer extends EventEmitter {
       ...config,
     };
 
+    // If binaryPath is provided, skip initial build
+    if (this.config.binaryPath) {
+      this.config.skipInitialBuild = true;
+    }
+
     this.state = {
       phase: 'starting',
       rustReady: false,
@@ -92,6 +143,7 @@ export class DevServer extends EventEmitter {
       projectDir: this.config.projectDir,
       release: this.config.release,
       bin: 'zap',
+      binaryPath: this.config.binaryPath,
     });
 
     this.viteProxy = new ViteProxy({
@@ -101,6 +153,7 @@ export class DevServer extends EventEmitter {
 
     this.codegenRunner = new CodegenRunner({
       projectDir: this.config.projectDir,
+      codegenBinary: this.config.codegenBinaryPath,
     });
 
     this.hotReloadServer = new HotReloadServer({
@@ -169,9 +222,17 @@ export class DevServer extends EventEmitter {
     });
 
     // Route scanner events
-    this.routeScanner.on('routes-changed', (tree) => {
+    this.routeScanner.on('routes-changed', async (tree) => {
       this.log('info', `Routes updated (${tree.routes.length} pages, ${tree.apiRoutes.length} API)`);
       this.hotReloadServer.reload('routes', []);
+
+      // Restart Rust server to pick up new routes
+      try {
+        await this.restartRustServer();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.log('error', `Failed to restart Rust server: ${message}`);
+      }
     });
 
     this.routeScanner.on('error', (err) => {
@@ -196,15 +257,19 @@ export class DevServer extends EventEmitter {
       await this.runCodegen();
 
       // Phase 2.5: Scan routes
-      await this.scanRoutes();
+      const routeTree = await this.scanRoutes();
+      this.currentRouteTree = routeTree;
 
-      // Phase 3: Start servers in parallel
+      // Phase 3: Start Rust HTTP server with IPC
+      await this.startRustServer(routeTree);
+
+      // Phase 4: Start other servers in parallel
       await Promise.all([
         this.startHotReloadServer(),
         this.startViteServer(),
       ]);
 
-      // Phase 4: Start file watcher and route watcher
+      // Phase 5: Start file watcher and route watcher
       this.startWatcher();
       await this.startRouteWatcher();
 
@@ -225,21 +290,38 @@ export class DevServer extends EventEmitter {
   }
 
   /**
-   * Stop all servers gracefully
+   * Stop all servers immediately
    */
   async stop(): Promise<void> {
+    if (this.state.phase === 'stopped') return;
     this.state.phase = 'stopped';
-    console.log(chalk.yellow('\n\nShutting down...'));
+    console.log(chalk.yellow('\nShutting down...'));
 
-    await Promise.all([
-      this.watcher.stop(),
-      this.viteProxy.stop(),
-      this.hotReloadServer.stop(),
-      this.routeScanner.stopWatching(),
-    ]);
+    // Kill Rust server first (most important)
+    if (this.processManager) {
+      this.processManager.stop();
+      this.processManager = null;
+    }
 
-    this.rustBuilder.cancel();
+    // Stop IPC
+    if (this.ipcServer) {
+      this.ipcServer.stop();
+      this.ipcServer = null;
+    }
+
+    // Stop other components
+    try {
+      this.watcher.stop();
+      this.viteProxy.stop();
+      this.hotReloadServer.stop();
+      this.routeScanner.stopWatching();
+      this.rustBuilder.cancel();
+    } catch {
+      // Ignore errors during cleanup
+    }
+
     console.log(chalk.green('Goodbye!\n'));
+    process.exit(0);
   }
 
   /**
@@ -287,21 +369,230 @@ export class DevServer extends EventEmitter {
   /**
    * Scan routes directory and generate route tree
    */
-  private async scanRoutes(): Promise<void> {
+  private async scanRoutes(): Promise<RouteTree | null> {
     if (!this.routeScanner.hasRoutesDir()) {
       this.log('debug', 'No routes directory found');
-      return;
+      return null;
     }
 
     this.spinner.start('Scanning routes...');
 
-    const tree = await this.routeScanner.scan();
+    const tree = await this.routeScanner.scan() as RouteTree | null;
 
     if (tree) {
       this.spinner.succeed(`Found ${tree.routes.length} pages, ${tree.apiRoutes.length} API routes`);
+      return tree;
     } else {
       this.spinner.warn('Route scanning skipped');
+      return null;
     }
+  }
+
+  /**
+   * Start the Rust HTTP server with IPC for TypeScript handlers
+   */
+  private async startRustServer(routeTree: RouteTree | null): Promise<void> {
+    this.spinner.start('Starting Rust HTTP server...');
+
+    try {
+      // Generate unique socket path for this dev session
+      this.socketPath = path.join(tmpdir(), `zap-dev-${Date.now()}-${Math.random().toString(36).substring(7)}.sock`);
+
+      // Create and start IPC server first
+      this.ipcServer = new IpcServer(this.socketPath);
+      await this.ipcServer.start();
+      this.log('debug', `IPC server listening on ${this.socketPath}`);
+
+      // Load and register route handlers
+      const routes = await this.loadRouteHandlers(routeTree);
+
+      // Build Rust server configuration
+      const config = this.buildRustConfig(routes);
+
+      // Get binary path
+      const binaryPath = this.rustBuilder.getBinaryPath();
+      this.log('debug', `Using Rust binary: ${binaryPath}`);
+
+      // Create process manager and start Rust server
+      this.processManager = new ProcessManager(binaryPath, this.socketPath);
+      await this.processManager.start(config, this.config.logLevel || 'info');
+
+      this.state.rustReady = true;
+      this.spinner.succeed(`Rust server ready on port ${this.config.rustPort}`);
+    } catch (err) {
+      this.spinner.fail('Failed to start Rust server');
+      const message = err instanceof Error ? err.message : String(err);
+      this.log('error', `Rust server error: ${message}`);
+      throw err;
+    }
+  }
+
+  /**
+   * Load TypeScript route handlers and register them with IPC server
+   */
+  private async loadRouteHandlers(routeTree: RouteTree | null): Promise<RouteConfig[]> {
+    const routes: RouteConfig[] = [];
+
+    if (!routeTree || !routeTree.apiRoutes || routeTree.apiRoutes.length === 0) {
+      console.log('[routes] No API routes to register');
+      return routes;
+    }
+
+    // Register tsx loader for TypeScript imports
+    await ensureTsxRegistered();
+
+    console.log(`[routes] Loading ${routeTree.apiRoutes.length} API route handlers...`);
+
+    for (const apiRoute of routeTree.apiRoutes) {
+      try {
+        // Construct the full file path
+        const routeFilePath = path.join(this.config.projectDir, 'routes', apiRoute.relativePath);
+        console.log(`[routes] Loading: ${routeFilePath}`);
+
+        // Dynamic import the route module using file URL for ESM compatibility
+        const fileUrl = pathToFileURL(routeFilePath).href;
+        const routeModule = await import(fileUrl);
+        console.log(`[routes] Loaded module, exports: ${Object.keys(routeModule).join(', ')}`);
+
+        // Check for each HTTP method handler
+        const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
+
+        for (const method of methods) {
+          if (routeModule[method]) {
+            const handlerId = `handler_${method}_${apiRoute.urlPath.replace(/\//g, '_').replace(/:/g, '')}`;
+            console.log(`[routes] Registering handler: ${handlerId} for ${method} ${apiRoute.urlPath}`);
+
+            // Register handler with IPC server
+            this.ipcServer!.registerHandler(handlerId, async (req) => {
+              console.log(`[handler] Received request: ${method} ${apiRoute.urlPath}`);
+              console.log(`[handler] Request data:`, JSON.stringify(req, null, 2));
+              try {
+                // Call the route handler
+                console.log(`[handler] Calling handler function...`);
+                const result = await routeModule[method](req);
+                console.log(`[handler] Handler returned:`, JSON.stringify(result, null, 2));
+
+                // Convert result to IPC response format
+                const response = this.formatHandlerResponse(result);
+                console.log(`[handler] Formatted response:`, JSON.stringify(response, null, 2));
+                return response;
+              } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                const stack = err instanceof Error ? err.stack : '';
+                console.error(`[handler] ERROR in ${method} ${apiRoute.urlPath}: ${message}`);
+                console.error(`[handler] Stack: ${stack}`);
+                return {
+                  status: 500,
+                  headers: { 'content-type': 'application/json' },
+                  body: JSON.stringify({ error: 'Internal Server Error', message }),
+                };
+              }
+            });
+
+            // Track handler mapping
+            this.registeredHandlers.set(handlerId, routeFilePath);
+
+            // Add route to config
+            routes.push({
+              method,
+              path: apiRoute.urlPath,
+              handler_id: handlerId,
+              is_typescript: true,
+            });
+
+            console.log(`[routes] ✓ Registered: ${method} ${apiRoute.urlPath} -> ${handlerId}`);
+          }
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`[routes] Failed to load ${apiRoute.relativePath}: ${message}`);
+      }
+    }
+
+    console.log(`[routes] Total registered: ${routes.length} API handlers`);
+    return routes;
+  }
+
+  /**
+   * Format handler result into IPC response
+   */
+  private formatHandlerResponse(result: unknown): { status: number; headers: Record<string, string>; body: string } {
+    // Handle Response object
+    if (result instanceof Response) {
+      return {
+        status: result.status,
+        headers: Object.fromEntries(result.headers.entries()),
+        body: '', // Will need to await text() but keeping sync for now
+      };
+    }
+
+    // Handle string
+    if (typeof result === 'string') {
+      return {
+        status: 200,
+        headers: { 'content-type': 'text/plain' },
+        body: result,
+      };
+    }
+
+    // Handle object (JSON)
+    if (typeof result === 'object' && result !== null) {
+      return {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(result),
+      };
+    }
+
+    // Default
+    return {
+      status: 200,
+      headers: { 'content-type': 'text/plain' },
+      body: String(result),
+    };
+  }
+
+  /**
+   * Build Rust server configuration from routes
+   */
+  private buildRustConfig(routes: RouteConfig[]): ZapConfig {
+    return {
+      port: this.config.rustPort!,
+      hostname: '127.0.0.1',
+      ipc_socket_path: this.socketPath,
+      routes,
+      static_files: [],
+      middleware: {
+        enable_cors: true,
+        enable_logging: true,
+        enable_compression: false,
+      },
+      health_check_path: '/health',
+      metrics_path: '/metrics',
+    };
+  }
+
+  /**
+   * Restart Rust server (called when routes change)
+   */
+  private async restartRustServer(): Promise<void> {
+    this.log('info', 'Restarting Rust server...');
+
+    // Stop existing server
+    if (this.processManager) {
+      await this.processManager.stop();
+    }
+    if (this.ipcServer) {
+      await this.ipcServer.stop();
+    }
+
+    // Clear registered handlers
+    this.registeredHandlers.clear();
+
+    // Re-scan routes and restart
+    const routeTree = await this.scanRoutes();
+    this.currentRouteTree = routeTree;
+    await this.startRustServer(routeTree);
   }
 
   /**
@@ -482,11 +773,11 @@ export class DevServer extends EventEmitter {
       ? `http://127.0.0.1:${this.viteProxy.getPort()}`
       : `http://127.0.0.1:${this.config.rustPort}`;
 
-    const { exec } = require('child_process');
-    const command = process.platform === 'darwin' ? 'open' :
-                   process.platform === 'win32' ? 'start' : 'xdg-open';
-
-    exec(`${command} ${url}`);
+    import('child_process').then(({ exec }) => {
+      const command = process.platform === 'darwin' ? 'open' :
+                     process.platform === 'win32' ? 'start' : 'xdg-open';
+      exec(`${command} ${url}`);
+    });
   }
 
   /**

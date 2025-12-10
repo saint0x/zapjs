@@ -5,8 +5,10 @@
   "description": "ZapRS - Fullstack Rust + React framework",
   "workspaces": [
     "packages/runtime",
+    "packages/router",
     "packages/cli",
-    "packages/dev-server"
+    "packages/dev-server",
+    "zaptest"
   ],
   "scripts": {
     "build": "npm run build:rust && npm run build:ts",

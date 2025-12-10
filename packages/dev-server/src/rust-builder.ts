@@ -18,6 +18,8 @@ export interface RustBuilderConfig {
   release?: boolean;
   features?: string[];
   bin?: string;
+  /** Path to pre-built binary (skips compilation) */
+  binaryPath?: string;
 }
 
 /**
@@ -62,6 +64,23 @@ export class RustBuilder extends EventEmitter {
    * Trigger a build, queuing if one is in progress
    */
   async build(): Promise<BuildResult> {
+    // If using pre-built binary, skip compilation
+    if (this.config.binaryPath) {
+      const { existsSync } = await import('fs');
+      if (existsSync(this.config.binaryPath)) {
+        this.status = 'success';
+        const result: BuildResult = {
+          success: true,
+          duration: 0,
+          errors: [],
+          warnings: [],
+        };
+        this.lastBuildResult = result;
+        this.emit('build-complete', result);
+        return result;
+      }
+    }
+
     // If already building, queue another build
     if (this.status === 'building') {
       this.buildQueued = true;
@@ -298,6 +317,11 @@ export class RustBuilder extends EventEmitter {
    * Get the path to the built binary
    */
   getBinaryPath(): string {
+    // Return pre-built binary path if configured
+    if (this.config.binaryPath) {
+      return this.config.binaryPath;
+    }
+
     const targetDir = this.config.release ? 'release' : 'debug';
     const binName = this.config.bin || 'zap';
 

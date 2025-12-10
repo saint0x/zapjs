@@ -1,9 +1,11 @@
 import { execSync } from 'child_process';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
-import { copySync, ensureDirSync, readFileSync, writeFileSync } from 'fs-extra';
+import fsExtra from 'fs-extra';
 import { join, resolve } from 'path';
 import ora from 'ora';
+
+const { ensureDirSync, writeFileSync } = fsExtra;
 
 export interface NewOptions {
   template: string;
@@ -62,14 +64,10 @@ export async function newCommand(name: string, options: NewOptions): Promise<voi
     ensureDirSync(projectDir);
     spinner.succeed('Project directory created');
 
-    // Copy template files
-    spinner.start(`Copying ${template} template...`);
-    const templatePath = join(__dirname, '../../templates', template);
-
-    // For now, create minimal project structure
-    // In production, we'd copy from pre-built templates
+    // Create project files
+    spinner.start(`Creating ${template} project...`);
     createMinimalProject(projectDir, name, template);
-    spinner.succeed('Template files created');
+    spinner.succeed('Project files created');
 
     // Install dependencies
     if (options.install !== false) {

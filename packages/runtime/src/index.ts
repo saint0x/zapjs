@@ -1,8 +1,12 @@
 import { join } from "path";
 import { tmpdir } from "os";
 import { existsSync, readFileSync } from "fs";
-import { ProcessManager, ZapConfig, RouteConfig, MiddlewareConfig } from "./process-manager";
-import { IpcServer, IpcRequest, HandlerFunction } from "./ipc-client";
+import { ProcessManager, ZapConfig, RouteConfig, MiddlewareConfig } from "./process-manager.js";
+import { IpcServer, IpcRequest, HandlerFunction } from "./ipc-client.js";
+
+// Re-export internal modules for dev-server usage
+export { ProcessManager, ZapConfig, RouteConfig, MiddlewareConfig } from "./process-manager.js";
+export { IpcServer, IpcRequest, HandlerFunction } from "./ipc-client.js";
 
 export interface FileRouteConfig {
   routesDir?: string;

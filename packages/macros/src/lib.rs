@@ -136,18 +136,32 @@ fn generate_wrapper(func: &ItemFn, metadata: &FunctionMetadata) -> proc_macro2::
     let fn_name = &func.sig.ident;
     let wrapper_name = format_ident!("__zap_wrapper_{}", fn_name);
 
-    // Generate parameter deserialization code
+    // Get parameter types for proper deserialization
+    let param_types: Vec<_> = func.sig.inputs.iter().filter_map(|arg| {
+        if let FnArg::Typed(PatType { ty, .. }) = arg {
+            Some(ty.clone())
+        } else {
+            None
+        }
+    }).collect();
+
+    // Generate parameter deserialization code with proper type conversion
     let param_deserialize: Vec<_> = metadata
         .params
         .iter()
-        .map(|p| {
+        .zip(param_types.iter())
+        .map(|(p, ty)| {
             let param_name = format_ident!("{}", p.name);
             let param_name_str = &p.name;
 
             quote! {
-                let #param_name: serde_json::Value = params.get(#param_name_str)
-                    .ok_or_else(|| format!("Missing parameter: {}", #param_name_str))?
-                    .clone();
+                let #param_name: #ty = {
+                    let value = params.get(#param_name_str)
+                        .ok_or_else(|| format!("Missing parameter: {}", #param_name_str))?
+                        .clone();
+                    serde_json::from_value(value)
+                        .map_err(|e| format!("Failed to deserialize parameter '{}': {}", #param_name_str, e))?
+                };
             }
         })
         .collect();

@@ -80,6 +80,8 @@ export interface WatchOptions extends ScanOptions {
   onChange: (tree: RouteTree) => void | Promise<void>;
   /** Debounce delay in ms */
   debounce?: number;
+  /** Skip the initial callback on start (useful when routes are already scanned) */
+  skipInitial?: boolean;
 }
 
 export interface RouteMatch {

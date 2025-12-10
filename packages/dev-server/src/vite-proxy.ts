@@ -1,4 +1,4 @@
-import { spawn, ChildProcess } from 'child_process';
+import { spawn, ChildProcess, execSync } from 'child_process';
 import { EventEmitter } from 'events';
 import path from 'path';
 import http from 'http';
@@ -76,6 +76,9 @@ export class ViteProxy extends EventEmitter {
       // Try to use bunx first, fall back to npx
       const runner = this.detectPackageRunner();
 
+      console.log(`[vite-proxy] Starting with: ${runner} ${args.join(' ')}`);
+      console.log(`[vite-proxy] Working directory: ${this.config.projectDir}`);
+
       this.process = spawn(runner, args, {
         cwd: this.config.projectDir,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -89,21 +92,29 @@ export class ViteProxy extends EventEmitter {
 
       this.process.stdout?.on('data', (data) => {
         const output = data.toString();
+        console.log(`[vite-proxy stdout] ${output.trim()}`);
         this.emit('output', output);
 
-        // Detect when Vite is ready
-        if (!startupComplete && output.includes('Local:')) {
+        // Detect when Vite is ready - check multiple patterns
+        const isReady = output.includes('Local:') ||
+                       output.includes('ready in') ||
+                       output.includes('VITE') && output.includes('localhost');
+
+        if (!startupComplete && isReady) {
           startupComplete = true;
           this.status = 'running';
 
-          // Parse actual port from output
-          const portMatch = output.match(/localhost:(\d+)/);
+          // Parse actual port from output - try multiple patterns
+          const portMatch = output.match(/localhost:(\d+)/) ||
+                           output.match(/127\.0\.0\.1:(\d+)/) ||
+                           output.match(/:(\d+)\//);
           if (portMatch) {
             this.actualPort = parseInt(portMatch[1], 10);
           } else {
             this.actualPort = this.config.port!;
           }
 
+          console.log(`[vite-proxy] Ready on port ${this.actualPort}`);
           this.emit('ready', this.actualPort);
           resolve();
         }
@@ -116,15 +127,17 @@ export class ViteProxy extends EventEmitter {
 
       this.process.stderr?.on('data', (data) => {
         const output = data.toString();
+        console.log(`[vite-proxy stderr] ${output.trim()}`);
         this.emit('stderr', output);
 
-        // Check for critical errors
-        if (output.includes('Error:') || output.includes('error')) {
+        // Check for critical errors (but not just any lowercase 'error')
+        if (output.includes('Error:') || output.includes('EADDRINUSE')) {
           this.emit('error', new Error(output));
         }
       });
 
       this.process.on('close', (code) => {
+        console.log(`[vite-proxy] Process closed with code ${code}`);
         const wasRunning = this.status === 'running';
         this.status = 'stopped';
         this.actualPort = null;
@@ -142,6 +155,7 @@ export class ViteProxy extends EventEmitter {
       });
 
       this.process.on('error', (err) => {
+        console.log(`[vite-proxy] Process error: ${err.message}`);
         this.status = 'error';
         this.emit('error', err);
         reject(err);
@@ -150,6 +164,7 @@ export class ViteProxy extends EventEmitter {
       // Timeout for startup
       setTimeout(() => {
         if (!startupComplete) {
+          console.log(`[vite-proxy] Startup timeout - still waiting...`);
           this.emit('timeout');
           // Don't reject - Vite might still be starting
         }
@@ -228,7 +243,6 @@ export class ViteProxy extends EventEmitter {
   private detectPackageRunner(): string {
     // Check if bun is available
     try {
-      const { execSync } = require('child_process');
       execSync('bun --version', { stdio: 'ignore' });
       return 'bunx';
     } catch {

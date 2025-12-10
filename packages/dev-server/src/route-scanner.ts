@@ -35,7 +35,7 @@ interface RouteTree {
 interface RouterModule {
   scanRoutes: (routesDir: string) => RouteTree;
   generateRouteTree: (options: { outputDir: string; routeTree: RouteTree }) => void;
-  watchRoutes: (options: { routesDir: string; onChange: (tree: RouteTree) => void }) => { stop: () => Promise<void> };
+  watchRoutes: (options: { routesDir: string; skipInitial?: boolean; onChange: (tree: RouteTree) => void }) => { stop: () => Promise<void> };
 }
 
 export interface RouteScannerConfig {
@@ -127,6 +127,7 @@ export class RouteScannerRunner extends EventEmitter {
 
       this.watcher = router.watchRoutes({
         routesDir: this.routesDir,
+        skipInitial: true,
         onChange: (tree: RouteTree) => {
           // Ensure output directory exists
           if (!existsSync(this.outputDir)) {

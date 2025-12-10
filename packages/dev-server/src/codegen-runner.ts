@@ -27,7 +27,7 @@ export class CodegenRunner extends EventEmitter {
   constructor(config: CodegenConfig) {
     super();
     this.config = {
-      outputDir: './src/api',
+      outputDir: './src/generated',
       ...config,
     };
   }
@@ -60,7 +60,10 @@ export class CodegenRunner extends EventEmitter {
       }
 
       return new Promise((resolve) => {
-        const args = ['--output', this.config.outputDir!];
+        const args = ['--output-dir', this.config.outputDir!];
+
+        console.log(`[codegen] Running: ${binary} ${args.join(' ')}`);
+        console.log(`[codegen] CWD: ${this.config.projectDir}`);
 
         const proc = spawn(binary, args, {
           cwd: this.config.projectDir,
@@ -68,17 +71,25 @@ export class CodegenRunner extends EventEmitter {
         });
 
         let stderr = '';
+        let stdout = '';
 
         proc.stdout?.on('data', (data) => {
+          stdout += data.toString();
+          console.log(`[codegen stdout] ${data.toString().trim()}`);
           this.emit('output', data.toString());
         });
 
         proc.stderr?.on('data', (data) => {
           stderr += data.toString();
+          console.log(`[codegen stderr] ${data.toString().trim()}`);
           this.emit('stderr', data.toString());
         });
 
         proc.on('close', (code) => {
+          console.log(`[codegen] Process exited with code: ${code}`);
+          if (stdout) console.log(`[codegen] Full stdout: ${stdout}`);
+          if (stderr) console.log(`[codegen] Full stderr: ${stderr}`);
+
           if (code === 0) {
             this.status = 'success';
             this.lastGenerated = new Date();
@@ -92,6 +103,7 @@ export class CodegenRunner extends EventEmitter {
         });
 
         proc.on('error', (err) => {
+          console.log(`[codegen] Process error: ${err.message}`);
           this.status = 'failed';
           this.emit('error', err);
           resolve(false);
@@ -108,9 +120,31 @@ export class CodegenRunner extends EventEmitter {
    * Find the codegen binary
    */
   private async findCodegenBinary(): Promise<string | null> {
+    console.log(`[codegen] Looking for binary, config.codegenBinary: ${this.config.codegenBinary}`);
+    console.log(`[codegen] projectDir: ${this.config.projectDir}`);
+
     // Check explicit config
-    if (this.config.codegenBinary && existsSync(this.config.codegenBinary)) {
-      return this.config.codegenBinary;
+    if (this.config.codegenBinary) {
+      console.log(`[codegen] Checking explicit path: ${this.config.codegenBinary}`);
+      if (existsSync(this.config.codegenBinary)) {
+        console.log(`[codegen] Found at explicit path`);
+        return this.config.codegenBinary;
+      }
+      console.log(`[codegen] Not found at explicit path`);
+    }
+
+    // Check project's bin directory first (for pre-built binaries)
+    const binCandidates = [
+      path.join(this.config.projectDir, 'bin/zap-codegen'),
+      path.join(this.config.projectDir, 'bin/zap-codegen.exe'),
+    ];
+
+    for (const candidate of binCandidates) {
+      console.log(`[codegen] Checking bin candidate: ${candidate}`);
+      if (existsSync(candidate)) {
+        console.log(`[codegen] Found at: ${candidate}`);
+        return candidate;
+      }
     }
 
     // Check project's target directory
@@ -123,7 +157,9 @@ export class CodegenRunner extends EventEmitter {
     ];
 
     for (const candidate of candidates) {
+      console.log(`[codegen] Checking target candidate: ${candidate}`);
       if (existsSync(candidate)) {
+        console.log(`[codegen] Found at: ${candidate}`);
         return candidate;
       }
     }
@@ -131,11 +167,13 @@ export class CodegenRunner extends EventEmitter {
     // Try to find in PATH
     try {
       execSync('which zap-codegen', { stdio: 'ignore' });
+      console.log(`[codegen] Found in PATH`);
       return 'zap-codegen';
     } catch {
       // Not in PATH
     }
 
+    console.log(`[codegen] Binary not found anywhere`);
     return null;
   }
 

@@ -125,11 +125,18 @@ export class IpcServer {
    * Process an incoming IPC message
    */
   private async processMessage(message: IpcMessage): Promise<IpcMessage> {
+    console.log(`[IPC] Received message type: ${message.type}`);
+    console.log(`[IPC] Full message:`, JSON.stringify(message, null, 2));
+
     if (message.type === "invoke_handler") {
       const { handler_id, request } = message;
+      console.log(`[IPC] Looking for handler: ${handler_id}`);
+      console.log(`[IPC] Available handlers: ${Array.from(this.handlers.keys()).join(', ')}`);
+
       const handler = this.handlers.get(handler_id);
 
       if (!handler) {
+        console.error(`[IPC] Handler NOT FOUND: ${handler_id}`);
         return {
           type: "error",
           code: "HANDLER_NOT_FOUND",
@@ -140,19 +147,19 @@ export class IpcServer {
       try {
         console.log(`[IPC] Invoking handler: ${handler_id} for ${request.method} ${request.path}`);
         const result = await handler(request);
+        console.log(`[IPC] Handler result:`, JSON.stringify(result, null, 2));
 
-        return {
+        const response = {
           type: "handler_response",
           handler_id,
           status: result.status || 200,
           headers: result.headers || { "content-type": "application/json" },
           body: result.body || "{}",
         };
+        console.log(`[IPC] Sending response:`, JSON.stringify(response, null, 2));
+        return response;
       } catch (error) {
-        console.error(
-          `[IPC] Error executing handler ${handler_id}:`,
-          error
-        );
+        console.error(`[IPC] Error executing handler ${handler_id}:`, error);
         return {
           type: "error",
           code: "HANDLER_EXECUTION_ERROR",
@@ -163,9 +170,11 @@ export class IpcServer {
 
     // Health check message
     if (message.type === "health_check") {
+      console.log(`[IPC] Health check received`);
       return { type: "health_check_response" };
     }
 
+    console.error(`[IPC] Unknown message type: ${message.type}`);
     return {
       type: "error",
       code: "UNKNOWN_MESSAGE_TYPE",
