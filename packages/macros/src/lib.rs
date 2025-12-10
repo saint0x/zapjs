@@ -178,14 +178,28 @@ fn generate_wrapper(func: &ItemFn, metadata: &FunctionMetadata) -> proc_macro2::
         quote! { #fn_name(#(#param_names),*) }
     };
 
-    // Handle Result types - if the return type is a Result, unwrap it
+    // Handle Result types - if the return type is a Result, handle both Ok and Err cases
+    // The Err case should serialize the error as JSON for type-safe TypeScript consumption
     let result_handling = if metadata.return_type.is_result() {
         quote! {
-            let result = #call_expr?;
+            match #call_expr {
+                Ok(result) => {
+                    serde_json::to_value(result).map_err(|e| e.to_string())
+                }
+                Err(e) => {
+                    // Serialize the error as JSON - TypeScript will receive it as the error type
+                    // The caller must handle this appropriately (set success=false)
+                    match serde_json::to_value(&e) {
+                        Ok(error_json) => Err(format!("__TYPED_ERROR__:{}", error_json)),
+                        Err(ser_err) => Err(format!("Failed to serialize error: {}", ser_err)),
+                    }
+                }
+            }
         }
     } else {
         quote! {
             let result = #call_expr;
+            serde_json::to_value(result).map_err(|e| e.to_string())
         }
     };
 
@@ -198,7 +212,6 @@ fn generate_wrapper(func: &ItemFn, metadata: &FunctionMetadata) -> proc_macro2::
             ) -> Result<serde_json::Value, String> {
                 #(#param_deserialize)*
                 #result_handling
-                serde_json::to_value(result).map_err(|e| e.to_string())
             }
         }
     } else {
@@ -209,7 +222,6 @@ fn generate_wrapper(func: &ItemFn, metadata: &FunctionMetadata) -> proc_macro2::
             ) -> Result<serde_json::Value, String> {
                 #(#param_deserialize)*
                 #result_handling
-                serde_json::to_value(result).map_err(|e| e.to_string())
             }
         }
     }

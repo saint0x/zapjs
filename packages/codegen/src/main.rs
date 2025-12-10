@@ -1,7 +1,10 @@
 use clap::Parser;
 use std::fs;
 use std::path::PathBuf;
-use zap_codegen::{generate_typescript_definitions, generate_typescript_runtime, generate_namespaced_server};
+use zap_codegen::{
+    find_exported_functions, find_exported_structs, generate_namespaced_server,
+    generate_typescript_definitions, generate_typescript_interfaces, generate_typescript_runtime,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -40,18 +43,27 @@ fn main() -> anyhow::Result<()> {
     // Create output directory if it doesn't exist
     fs::create_dir_all(&args.output_dir)?;
 
-    // Load exported functions from input file or generate from source
+    // Load exported functions from input file or scan Rust source
     let functions = if let Some(input_path) = args.input {
         let json_content = fs::read_to_string(&input_path)?;
         serde_json::from_str(&json_content)?
     } else {
-        // For now, generate empty list - in production this would scan Rust source
-        // and extract #[zap::export] functions
-        // This would require parsing Rust code which is complex
-        eprintln!("Warning: No input file specified, generating empty exports");
-        eprintln!("Use --input <file> to specify a JSON file with exported functions");
-        vec![]
+        // Scan Rust source files for #[export] functions
+        println!("Scanning {} for #[export] functions...", args.project_dir.display());
+        find_exported_functions(&args.project_dir)?
     };
+
+    // Scan for serializable structs
+    println!("Scanning {} for serializable structs...", args.project_dir.display());
+    let structs = find_exported_structs(&args.project_dir)?;
+
+    // Generate TypeScript interfaces from Rust structs
+    if !structs.is_empty() {
+        let interfaces = generate_typescript_interfaces(&structs);
+        let interfaces_path = args.output_dir.join("types.ts");
+        fs::write(&interfaces_path, interfaces)?;
+        println!("Generated: {} ({} types)", interfaces_path.display(), structs.len());
+    }
 
     // Generate TypeScript definitions
     if args.definitions {
@@ -77,7 +89,7 @@ fn main() -> anyhow::Result<()> {
         println!("Generated: {}", server_path.display());
     }
 
-    println!("Successfully generated TypeScript bindings for {} functions", functions.len());
+    println!("Successfully generated TypeScript bindings for {} functions and {} types", functions.len(), structs.len());
     Ok(())
 }
 

@@ -512,10 +512,7 @@ impl Zap {
             );
         }
 
-        // RPC endpoint for TypeScript routes to call Rust #[export] functions
-        // This is registered by the application binary, not here
-        // The binary adds its own RPC handler that dispatches to Rust functions directly
-        info!("📡 RPC endpoint: /__zap_rpc (to be registered by application)");
+        // Note: RPC endpoint (/__zap_rpc) is registered by the application binary
 
         // Add health check
         if !config.health_check_path.is_empty() {
