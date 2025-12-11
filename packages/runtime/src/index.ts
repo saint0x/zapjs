@@ -39,6 +39,29 @@ export type {
   RpcResponseMessage,
   RpcErrorMessage,
   PendingRequest,
+  // Security & Observability config types
+  SecurityConfig,
+  SecurityHeadersConfig,
+  HstsConfig,
+  RateLimitConfig,
+  CorsConfig,
+  ObservabilityConfig,
+  // Streaming types (Phase 8)
+  StreamChunk,
+  StreamingHandler,
+  AnyHandler,
+  StreamStartMessage,
+  StreamChunkMessage,
+  StreamEndMessage,
+  StreamMessage,
+  // WebSocket types (Phase 8)
+  WsConnection,
+  WsHandler,
+  WsConnectMessage,
+  WsMessageMessage,
+  WsCloseMessage,
+  WsSendMessage,
+  WsMessage,
 } from "./types.js";
 
 // Re-export type guards
@@ -50,11 +73,33 @@ export {
   isHealthCheckResponseMessage,
   isRpcResponseMessage,
   isRpcErrorMessage,
+  isAsyncIterable,
 } from "./types.js";
 
 // Re-export internal modules for dev-server usage
 export { ProcessManager } from "./process-manager.js";
 export { IpcServer, IpcClient } from "./ipc-client.js";
+
+// Re-export error boundary components and hooks (Phase 10.3)
+export {
+  ErrorBoundary,
+  DefaultErrorComponent,
+  RouteErrorContext,
+  createRouteError,
+  ZapError,
+  type ZapRouteError,
+  type ErrorComponentProps,
+  type ErrorComponent,
+} from "./error-boundary.js";
+
+export {
+  useRouteError,
+  useIsErrorState,
+  useErrorState,
+} from "./hooks.js";
+
+// Re-export logger (Phase 10.2)
+export { Logger, logger, type LogContext, type LogLevel, type ChildLogger } from "./logger.js";
 
 /**
  * Zap - Ultra-fast HTTP server for Node.js and Bun
@@ -322,9 +367,14 @@ export class Zap {
 
           // Handle different response types
           if (result instanceof Response) {
+            // Convert Headers to Record<string, string>
+            const headersObj: Record<string, string> = {};
+            result.headers.forEach((value, key) => {
+              headersObj[key] = value;
+            });
             return {
               status: result.status,
-              headers: Object.fromEntries(result.headers.entries()),
+              headers: headersObj,
               body: await result.text(),
             };
           }

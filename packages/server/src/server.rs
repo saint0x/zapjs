@@ -307,7 +307,7 @@ impl Zap {
     pub async fn listen(self) -> Result<(), ZapError> {
         let addr = self.config.socket_addr();
         let socket_addr: SocketAddr = addr.parse().map_err(|e| {
-            ZapError::Http(format!("Invalid address '{}': {}", addr, e))
+            ZapError::http(format!("Invalid address '{}': {}", addr, e))
         })?;
 
         let listener = TcpListener::bind(socket_addr).await?;
@@ -374,7 +374,7 @@ impl Zap {
 
         // Collect the body bytes
         let body_bytes = body.collect().await
-            .map_err(|e| ZapError::Http(format!("Failed to read request body: {}", e)))?
+            .map_err(|e| ZapError::http(format!("Failed to read request body: {}", e)))?
             .to_bytes()
             .to_vec();
 
@@ -397,7 +397,7 @@ impl Zap {
         // Step 3: Parse using our fast HTTP parser
         let parser = HttpParser::new();
         let parsed = parser.parse_request(&request_bytes)
-            .map_err(|e| ZapError::Http(format!("HTTP parsing failed: {:?}", e)))?;
+            .map_err(|e| ZapError::http(format!("HTTP parsing failed: {:?}", e)))?;
 
         // Step 4: Check for static file handlers first
         let path_for_routing = parsed.path.split('?').next().unwrap_or(parsed.path);
@@ -409,7 +409,7 @@ impl Zap {
 
         // Step 5: Route the request using our fast router
         let (handler, route_params) = self.router.at(method, path_for_routing)
-            .ok_or_else(|| ZapError::Routing(format!("No route found for {} {}", method, path_for_routing)))?;
+            .ok_or_else(|| ZapError::route_not_found(path_for_routing))?;
 
         // Step 6: Create Request object
         let body_start = &request_bytes[parsed.body_offset..];
@@ -417,7 +417,7 @@ impl Zap {
 
         // Step 7: Execute the handler (middleware is handled separately in a real implementation)
         let response = handler.handle(request).await
-            .map_err(|e| ZapError::Handler(format!("Handler execution failed: {}", e)))?;
+            .map_err(|e| ZapError::handler(format!("Handler execution failed: {}", e)))?;
 
         Ok(response)
     }
@@ -479,7 +479,7 @@ impl Zap {
                 "HEAD" => Method::HEAD,
                 "OPTIONS" => Method::OPTIONS,
                 _ => {
-                    return Err(ZapError::Config(format!(
+                    return Err(ZapError::config(format!(
                         "Unknown HTTP method: {}",
                         method
                     )))
@@ -494,7 +494,7 @@ impl Zap {
                     config.request_timeout_secs,
                 );
                 server.router.insert(method_enum, &route_cfg.path, Box::new(proxy))
-                    .map_err(|e| ZapError::Config(format!(
+                    .map_err(|e| ZapError::config(format!(
                         "Failed to register route {}: {}",
                         route_cfg.path, e
                     )))?;

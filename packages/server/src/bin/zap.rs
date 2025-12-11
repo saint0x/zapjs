@@ -107,7 +107,7 @@ async fn main() -> ZapResult<()> {
 /// Initialize structured logging with configurable level
 fn init_logging(level: &str) -> ZapResult<()> {
     let env_filter = level.parse::<EnvFilter>().map_err(|e| {
-        zap_server::error::ZapError::Config(format!(
+        zap_server::error::ZapError::config(format!(
             "Invalid log level '{}': {}",
             level, e
         ))

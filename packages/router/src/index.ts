@@ -12,6 +12,7 @@ export type {
   ScannedRoute,
   LayoutRoute,
   RootRoute,
+  WebSocketRoute,
   RouteTree,
   ScanOptions,
   CodegenOptions,

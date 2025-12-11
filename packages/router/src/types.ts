@@ -12,6 +12,8 @@ export interface RouteParam {
   index: number;
   /** Whether this is a catch-all param (e.g., $...rest) */
   catchAll: boolean;
+  /** Whether this param is optional (e.g., $param? or $...rest?) */
+  optional: boolean;
 }
 
 export interface ScannedRoute {
@@ -33,6 +35,20 @@ export interface ScannedRoute {
   group?: string;
   /** Whether this is an index route */
   isIndex: boolean;
+  /** Whether this route exports an errorComponent (TanStack style) */
+  hasErrorComponent?: boolean;
+  /** Export name for the error component (defaults to 'errorComponent') */
+  errorComponentExport?: string;
+  /** Whether this route exports a pendingComponent */
+  hasPendingComponent?: boolean;
+  /** Export name for the pending component */
+  pendingComponentExport?: string;
+  /** Whether this route exports a meta function for head management */
+  hasMeta?: boolean;
+  /** Whether this route exports middleware */
+  hasMiddleware?: boolean;
+  /** Route priority score (higher = more specific) */
+  priority?: number;
 }
 
 export interface LayoutRoute {
@@ -44,10 +60,25 @@ export interface LayoutRoute {
   urlPath: string;
   /** Child routes */
   children: (ScannedRoute | LayoutRoute)[];
+  /** Parent layout path (for nested layouts) */
+  parentLayout?: string;
+  /** Directory path this layout is scoped to */
+  scopePath: string;
 }
 
 export interface RootRoute extends LayoutRoute {
   type: 'root';
+}
+
+export interface WebSocketRoute {
+  /** Absolute file path */
+  filePath: string;
+  /** Relative path from routes directory */
+  relativePath: string;
+  /** WebSocket URL path */
+  urlPath: string;
+  /** Route parameters */
+  params: RouteParam[];
 }
 
 export interface RouteTree {
@@ -55,6 +86,8 @@ export interface RouteTree {
   routes: ScannedRoute[];
   layouts: LayoutRoute[];
   apiRoutes: ScannedRoute[];
+  /** WebSocket routes from ws/ folder or WEBSOCKET exports */
+  wsRoutes: WebSocketRoute[];
 }
 
 export interface ScanOptions {

@@ -1,11 +1,54 @@
 //! Response types and utilities for ZapServer
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use bytes::Bytes;
 use serde::Serialize;
 
 use zap_core::{Response, StatusCode, ResponseBody};
+
+/// Streaming response data
+#[derive(Debug)]
+pub struct StreamingResponse {
+    /// HTTP status code
+    pub status: u16,
+    /// Response headers
+    pub headers: HashMap<String, String>,
+    /// Collected body chunks (base64 decoded)
+    pub chunks: Vec<Vec<u8>>,
+}
+
+impl StreamingResponse {
+    /// Create a new streaming response
+    pub fn new(status: u16, headers: HashMap<String, String>) -> Self {
+        Self {
+            status,
+            headers,
+            chunks: Vec::new(),
+        }
+    }
+
+    /// Add a chunk to the response
+    pub fn add_chunk(&mut self, data: Vec<u8>) {
+        self.chunks.push(data);
+    }
+
+    /// Get the complete body as bytes
+    pub fn body_bytes(&self) -> Vec<u8> {
+        let total_len: usize = self.chunks.iter().map(|c| c.len()).sum();
+        let mut body = Vec::with_capacity(total_len);
+        for chunk in &self.chunks {
+            body.extend_from_slice(chunk);
+        }
+        body
+    }
+
+    /// Get the complete body as a string (lossy conversion)
+    pub fn body_string(&self) -> String {
+        String::from_utf8_lossy(&self.body_bytes()).to_string()
+    }
+}
 
 /// Zap response types with auto-serialization
 #[derive(Debug)]
@@ -26,6 +69,8 @@ pub enum ZapResponse {
     Redirect(String),
     /// Empty response with status code
     Status(StatusCode),
+    /// Streaming response (collected chunks)
+    Stream(StreamingResponse),
 }
 
 /// JSON response wrapper for auto-serialization
@@ -106,6 +151,19 @@ impl ZapResponse {
                     .status(501)
                     .body("File serving not yet implemented".to_string())
                     .unwrap()
+            }
+            ZapResponse::Stream(stream_response) => {
+                let mut builder = hyper::Response::builder()
+                    .status(stream_response.status);
+
+                // Add all headers from the streaming response
+                for (key, value) in &stream_response.headers {
+                    builder = builder.header(key, value);
+                }
+
+                // Convert chunks to body
+                let body = stream_response.body_string();
+                builder.body(body).unwrap()
             }
         }
     }

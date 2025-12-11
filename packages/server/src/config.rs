@@ -140,10 +140,10 @@ impl ZapConfig {
     /// Load configuration from a JSON file
     pub fn from_file(path: &str) -> ZapResult<Self> {
         let content = std::fs::read_to_string(path)
-            .map_err(|e| ZapError::Config(format!("Failed to read config file: {}", e)))?;
+            .map_err(|e| ZapError::config(format!("Failed to read config file: {}", e)))?;
 
         let config = serde_json::from_str(&content)
-            .map_err(|e| ZapError::Config(format!("Failed to parse config JSON: {}", e)))?;
+            .map_err(|e| ZapError::config(format!("Failed to parse config JSON: {}", e)))?;
 
         Ok(config)
     }
@@ -151,16 +151,16 @@ impl ZapConfig {
     /// Validate configuration
     pub async fn validate(&self) -> ZapResult<()> {
         if self.port == 0 {
-            return Err(ZapError::Config("Port must be > 0".to_string()));
+            return Err(ZapError::config("Port must be > 0"));
         }
         if self.hostname.is_empty() {
-            return Err(ZapError::Config("Hostname cannot be empty".to_string()));
+            return Err(ZapError::config("Hostname cannot be empty"));
         }
         if self.ipc_socket_path.is_empty() {
-            return Err(ZapError::Config("IPC socket path cannot be empty".to_string()));
+            return Err(ZapError::config("IPC socket path cannot be empty"));
         }
         if self.request_timeout_secs == 0 {
-            return Err(ZapError::Config("Request timeout must be > 0".to_string()));
+            return Err(ZapError::config("Request timeout must be > 0"));
         }
         Ok(())
     }

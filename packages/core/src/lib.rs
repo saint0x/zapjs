@@ -33,20 +33,24 @@ pub mod params;
 pub mod radix;
 pub mod http;
 pub mod middleware;
+pub mod rate_limit;
 pub mod request;
 pub mod response;
+pub mod security_headers;
 
 pub use method::Method;
 pub use params::{Params, ParamError};
 pub use radix::RadixTree;
 pub use http::{HttpParser, ParsedRequest, Headers, ParseError};
 pub use middleware::{
-    Context, ResponseBuilder, Response as MiddlewareResponse, Extensions, MiddlewareResult, 
+    Context, ResponseBuilder, Response as MiddlewareResponse, Extensions, MiddlewareResult,
     Middleware, MiddlewareChain, MiddlewareError,
-    LoggerMiddleware, CorsMiddleware
+    LoggerMiddleware, CorsMiddleware, CorsConfig, CorsError
 };
+pub use rate_limit::{RateLimitMiddleware, RateLimitConfig, RateLimitStore, InMemoryStore, RateLimitError};
 pub use request::{Request, FormParseError};
 pub use response::{Response, StatusCode, ResponseBody, CookieOptions};
+pub use security_headers::{SecurityHeadersMiddleware, SecurityHeadersConfig, HstsConfig};
 
 /// Core router structure optimized for high-performance lookups
 pub struct Router<T> {

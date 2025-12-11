@@ -308,25 +308,118 @@ impl Middleware for LoggerMiddleware {
     }
 }
 
+/// CORS configuration errors
+#[derive(Debug, Clone)]
+pub enum CorsError {
+    /// No origins configured
+    NoOriginsConfigured,
+    /// Wildcard origin not allowed in strict mode
+    WildcardNotAllowed,
+}
+
+impl std::fmt::Display for CorsError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CorsError::NoOriginsConfigured => {
+                write!(f, "CORS enabled but no origins configured. Add allowed origins to your configuration.")
+            }
+            CorsError::WildcardNotAllowed => {
+                write!(f, "Wildcard '*' origin is not allowed for security reasons. Specify explicit origins.")
+            }
+        }
+    }
+}
+
+impl std::error::Error for CorsError {}
+
+/// CORS middleware configuration
+#[derive(Debug, Clone)]
+pub struct CorsConfig {
+    /// Allowed origins (REQUIRED - no wildcard in strict mode)
+    pub origins: Vec<String>,
+    /// Allowed methods
+    pub methods: Vec<Method>,
+    /// Allowed headers
+    pub headers: Vec<String>,
+    /// Expose headers to client
+    pub expose_headers: Vec<String>,
+    /// Allow credentials
+    pub credentials: bool,
+    /// Max age for preflight cache (seconds)
+    pub max_age: Option<u64>,
+}
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        Self {
+            origins: Vec::new(),
+            methods: vec![Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH, Method::OPTIONS, Method::HEAD],
+            headers: vec!["Content-Type".to_string(), "Authorization".to_string()],
+            expose_headers: Vec::new(),
+            credentials: false,
+            max_age: Some(86400), // 24 hours
+        }
+    }
+}
+
 /// Built-in CORS middleware
+///
+/// For production use, always use `CorsMiddleware::strict()` with explicit origins.
+/// The `permissive()` method is deprecated and should only be used for development.
 pub struct CorsMiddleware {
     /// Allowed origins
     origins: Vec<String>,
     /// Allowed methods
-    #[allow(dead_code)]
     methods: Vec<Method>,
     /// Allowed headers
-    #[allow(dead_code)]
     headers: Vec<String>,
+    /// Expose headers
+    expose_headers: Vec<String>,
+    /// Allow credentials
+    credentials: bool,
+    /// Max age
+    max_age: Option<u64>,
 }
 
 impl CorsMiddleware {
-    /// Create permissive CORS middleware
+    /// Create CORS middleware with strict configuration (RECOMMENDED)
+    ///
+    /// Requires explicit origins - wildcard "*" is not allowed.
+    ///
+    /// # Errors
+    /// - Returns `CorsError::NoOriginsConfigured` if origins list is empty
+    /// - Returns `CorsError::WildcardNotAllowed` if "*" is in the origins list
+    pub fn strict(config: CorsConfig) -> Result<Self, CorsError> {
+        if config.origins.is_empty() {
+            return Err(CorsError::NoOriginsConfigured);
+        }
+
+        if config.origins.iter().any(|o| o == "*") {
+            return Err(CorsError::WildcardNotAllowed);
+        }
+
+        Ok(Self {
+            origins: config.origins,
+            methods: config.methods,
+            headers: config.headers,
+            expose_headers: config.expose_headers,
+            credentials: config.credentials,
+            max_age: config.max_age,
+        })
+    }
+
+    /// Create permissive CORS middleware (DEPRECATED - use strict() instead)
+    ///
+    /// Allows all origins with "*". This is insecure for production use.
+    #[deprecated(since = "1.0.0", note = "Use strict() with explicit origins for production")]
     pub fn permissive() -> Self {
         Self {
             origins: vec!["*".to_string()],
             methods: vec![Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH, Method::OPTIONS],
             headers: vec!["*".to_string()],
+            expose_headers: Vec::new(),
+            credentials: false,
+            max_age: None,
         }
     }
 
@@ -335,7 +428,78 @@ impl CorsMiddleware {
         Self {
             origins: origins.into_iter().map(|s| s.into()).collect(),
             methods: vec![Method::GET, Method::POST, Method::PUT, Method::DELETE, Method::PATCH, Method::OPTIONS],
-            headers: vec!["*".to_string()],
+            headers: vec!["Content-Type".to_string(), "Authorization".to_string()],
+            expose_headers: Vec::new(),
+            credentials: false,
+            max_age: Some(86400),
+        }
+    }
+
+    /// Builder: Set allowed methods
+    pub fn methods(mut self, methods: Vec<Method>) -> Self {
+        self.methods = methods;
+        self
+    }
+
+    /// Builder: Set allowed headers
+    pub fn headers(mut self, headers: Vec<String>) -> Self {
+        self.headers = headers;
+        self
+    }
+
+    /// Builder: Set expose headers
+    pub fn expose_headers(mut self, headers: Vec<String>) -> Self {
+        self.expose_headers = headers;
+        self
+    }
+
+    /// Builder: Allow credentials
+    pub fn allow_credentials(mut self) -> Self {
+        self.credentials = true;
+        self
+    }
+
+    /// Builder: Set max age for preflight cache
+    pub fn max_age(mut self, seconds: u64) -> Self {
+        self.max_age = Some(seconds);
+        self
+    }
+
+    /// Check if origin is allowed
+    fn is_origin_allowed(&self, origin: &str) -> bool {
+        self.origins.iter().any(|o| o == "*" || o == origin)
+    }
+
+    /// Get the allowed origin for response header
+    fn get_allowed_origin(&self, request_origin: Option<&str>) -> Option<String> {
+        if self.origins.iter().any(|o| o == "*") {
+            return Some("*".to_string());
+        }
+
+        request_origin.and_then(|origin| {
+            if self.is_origin_allowed(origin) {
+                Some(origin.to_string())
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Build methods string for header
+    fn methods_string(&self) -> String {
+        self.methods
+            .iter()
+            .map(|m| format!("{:?}", m))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
+    /// Build headers string for header
+    fn headers_string(&self) -> String {
+        if self.headers.iter().any(|h| h == "*") {
+            "*".to_string()
+        } else {
+            self.headers.join(", ")
         }
     }
 }
@@ -343,24 +507,64 @@ impl CorsMiddleware {
 impl Middleware for CorsMiddleware {
     fn call<'a>(&'a self, ctx: Context<'a>) -> MiddlewareFuture<'a> {
         Box::pin(async move {
+            let request_origin = ctx.headers().get("Origin").map(|s| s.to_string());
+            let allowed_origin = self.get_allowed_origin(request_origin.as_deref());
+
             // Handle preflight requests
             if ctx.method() == Method::OPTIONS {
-                let response = ResponseBuilder::new()
-                    .status(200)
-                    .header("Access-Control-Allow-Origin", &self.origins[0])
-                    .header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
-                    .header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-                    .body(Vec::new())
-                    .finish();
-                
+                let mut response_builder = ResponseBuilder::new().status(204);
+
+                if let Some(ref origin) = allowed_origin {
+                    response_builder = response_builder
+                        .header("Access-Control-Allow-Origin", origin)
+                        .header("Access-Control-Allow-Methods", &self.methods_string())
+                        .header("Access-Control-Allow-Headers", &self.headers_string());
+
+                    if self.credentials {
+                        response_builder = response_builder.header("Access-Control-Allow-Credentials", "true");
+                    }
+
+                    if let Some(max_age) = self.max_age {
+                        response_builder = response_builder.header("Access-Control-Max-Age", &max_age.to_string());
+                    }
+
+                    if !self.expose_headers.is_empty() {
+                        response_builder = response_builder.header(
+                            "Access-Control-Expose-Headers",
+                            &self.expose_headers.join(", "),
+                        );
+                    }
+                }
+
+                let response = response_builder.body(Vec::new()).finish();
                 return Ok((ctx, MiddlewareResult::Response(response)));
             }
 
-            // Add CORS headers to response
+            // Add CORS headers to response for actual requests
             let mut new_ctx = ctx;
-            new_ctx.response = new_ctx.response
-                .clone()
-                .header("Access-Control-Allow-Origin", &self.origins[0]);
+
+            if let Some(ref origin) = allowed_origin {
+                new_ctx.response = new_ctx
+                    .response
+                    .clone()
+                    .header("Access-Control-Allow-Origin", origin);
+
+                if self.credentials {
+                    new_ctx.response = new_ctx
+                        .response
+                        .header("Access-Control-Allow-Credentials", "true");
+                }
+
+                if !self.expose_headers.is_empty() {
+                    new_ctx.response = new_ctx.response.header(
+                        "Access-Control-Expose-Headers",
+                        &self.expose_headers.join(", "),
+                    );
+                }
+
+                // Vary header for caching
+                new_ctx.response = new_ctx.response.header("Vary", "Origin");
+            }
 
             Ok((new_ctx, MiddlewareResult::Continue))
         })

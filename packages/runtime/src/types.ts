@@ -22,6 +22,8 @@ export interface ZapRequest<
   TParams extends Record<string, string> = Record<string, string>,
   TQuery extends Record<string, string> = Record<string, string>,
 > {
+  /** Unique request ID for correlation across Rust/TypeScript boundary */
+  request_id: string;
   /** HTTP method */
   method: string;
   /** Full path including query string */
@@ -104,12 +106,20 @@ export interface HandlerResponseMessage {
 }
 
 /**
- * Error response message
+ * Structured error response message with full context
  */
 export interface ErrorMessage {
   type: 'error';
+  /** Machine-readable error code (e.g., "HANDLER_ERROR", "VALIDATION_ERROR") */
   code: string;
+  /** Human-readable error message */
   message: string;
+  /** HTTP status code */
+  status: number;
+  /** Unique error identifier for log correlation */
+  digest: string;
+  /** Additional error-specific details */
+  details?: Record<string, unknown>;
 }
 
 /**
@@ -126,6 +136,97 @@ export interface HealthCheckResponseMessage {
   type: 'health_check_response';
 }
 
+// ============================================================================
+// Streaming Message Types (Phase 8)
+// ============================================================================
+
+/**
+ * Start a streaming response
+ */
+export interface StreamStartMessage {
+  type: 'stream_start';
+  stream_id: string;
+  status: number;
+  headers: Record<string, string>;
+}
+
+/**
+ * A chunk of streaming data
+ */
+export interface StreamChunkMessage {
+  type: 'stream_chunk';
+  stream_id: string;
+  /** Base64-encoded binary data */
+  data: string;
+}
+
+/**
+ * End of streaming response
+ */
+export interface StreamEndMessage {
+  type: 'stream_end';
+  stream_id: string;
+}
+
+/**
+ * All streaming message types
+ */
+export type StreamMessage = StreamStartMessage | StreamChunkMessage | StreamEndMessage;
+
+// ============================================================================
+// WebSocket Message Types (Phase 8)
+// ============================================================================
+
+/**
+ * WebSocket connection opened
+ */
+export interface WsConnectMessage {
+  type: 'ws_connect';
+  connection_id: string;
+  handler_id: string;
+  path: string;
+  headers: Record<string, string>;
+}
+
+/**
+ * WebSocket message from client
+ */
+export interface WsMessageMessage {
+  type: 'ws_message';
+  connection_id: string;
+  handler_id: string;
+  /** Message data (text or base64-encoded binary) */
+  data: string;
+  /** true if binary data */
+  binary: boolean;
+}
+
+/**
+ * WebSocket connection closed
+ */
+export interface WsCloseMessage {
+  type: 'ws_close';
+  connection_id: string;
+  handler_id: string;
+  code?: number;
+  reason?: string;
+}
+
+/**
+ * WebSocket message to send to client (TypeScript -> Rust)
+ */
+export interface WsSendMessage {
+  type: 'ws_send';
+  connection_id: string;
+  data: string;
+  binary: boolean;
+}
+
+/**
+ * All WebSocket message types
+ */
+export type WsMessage = WsConnectMessage | WsMessageMessage | WsCloseMessage | WsSendMessage;
+
 /**
  * All possible IPC message types (discriminated union)
  */
@@ -134,7 +235,20 @@ export type IpcMessage =
   | HandlerResponseMessage
   | ErrorMessage
   | HealthCheckMessage
-  | HealthCheckResponseMessage;
+  | HealthCheckResponseMessage
+  // RPC messages
+  | RpcCallMessage
+  | RpcResponseMessage
+  | RpcErrorMessage
+  // Streaming messages (Phase 8)
+  | StreamStartMessage
+  | StreamChunkMessage
+  | StreamEndMessage
+  // WebSocket messages (Phase 8)
+  | WsConnectMessage
+  | WsMessageMessage
+  | WsCloseMessage
+  | WsSendMessage;
 
 /**
  * IPC message types as string literals
@@ -223,6 +337,114 @@ export interface MiddlewareConfig {
   enable_cors?: boolean;
   enable_logging?: boolean;
   enable_compression?: boolean;
+  /** Security configuration */
+  security?: SecurityConfig;
+  /** CORS configuration (replaces enable_cors when present) */
+  cors?: CorsConfig;
+}
+
+// ============================================================================
+// Security Configuration Types (Phase 10.1)
+// ============================================================================
+
+/**
+ * Security headers configuration
+ */
+export interface SecurityHeadersConfig {
+  /** Enable security headers middleware (default: true) */
+  enabled?: boolean;
+  /** X-Frame-Options header (default: "DENY") */
+  frameOptions?: 'DENY' | 'SAMEORIGIN' | false;
+  /** X-Content-Type-Options (default: "nosniff") */
+  contentTypeOptions?: 'nosniff' | false;
+  /** X-XSS-Protection (default: "1; mode=block") */
+  xssProtection?: string | false;
+  /** HSTS configuration */
+  hsts?: HstsConfig | false;
+  /** Content-Security-Policy (must be explicitly configured) */
+  contentSecurityPolicy?: string;
+  /** Referrer-Policy (default: "strict-origin-when-cross-origin") */
+  referrerPolicy?: string;
+}
+
+/**
+ * HTTP Strict Transport Security configuration
+ */
+export interface HstsConfig {
+  /** max-age in seconds (default: 31536000 = 1 year) */
+  maxAge?: number;
+  /** Include subdomains (default: true) */
+  includeSubDomains?: boolean;
+  /** Preload flag (default: false) */
+  preload?: boolean;
+}
+
+/**
+ * Rate limiting configuration
+ */
+export interface RateLimitConfig {
+  /** Enable rate limiting (default: false) */
+  enabled?: boolean;
+  /** Maximum requests per window (default: 100) */
+  max?: number;
+  /** Time window in seconds (default: 60) */
+  windowSecs?: number;
+  /** Storage backend: "memory" | "redis" (default: "memory") */
+  storage?: 'memory' | 'redis';
+  /** Redis connection URL (required if storage is "redis") */
+  redisUrl?: string;
+  /** Paths to skip rate limiting */
+  skipPaths?: string[];
+  /** Custom error message */
+  message?: string;
+}
+
+/**
+ * CORS configuration (strict - no wildcard allowed)
+ */
+export interface CorsConfig {
+  /** Allowed origins (REQUIRED - no more "*" wildcard) */
+  origins: string[];
+  /** Allowed methods */
+  methods?: string[];
+  /** Allowed headers */
+  headers?: string[];
+  /** Expose headers */
+  exposeHeaders?: string[];
+  /** Allow credentials */
+  credentials?: boolean;
+  /** Max age for preflight cache in seconds */
+  maxAge?: number;
+}
+
+/**
+ * Full security configuration
+ */
+export interface SecurityConfig {
+  /** Security headers configuration */
+  headers?: SecurityHeadersConfig;
+  /** Rate limiting configuration */
+  rateLimit?: RateLimitConfig;
+  /** CORS configuration */
+  cors?: CorsConfig;
+}
+
+// ============================================================================
+// Observability Configuration Types (Phase 10.2)
+// ============================================================================
+
+/**
+ * Observability configuration
+ */
+export interface ObservabilityConfig {
+  /** Enable JSON logging format (default: false in dev, true in prod) */
+  jsonLogs?: boolean;
+  /** Metrics endpoint path (default: "/metrics", null to disable) */
+  metricsPath?: string | null;
+  /** Enable request ID generation/propagation (default: true) */
+  enableRequestId?: boolean;
+  /** Log level */
+  logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error';
 }
 
 /**
@@ -239,6 +461,10 @@ export interface ZapConfig {
   middleware: MiddlewareConfig;
   health_check_path?: string;
   metrics_path?: string;
+  /** Security configuration */
+  security?: SecurityConfig;
+  /** Observability configuration */
+  observability?: ObservabilityConfig;
 }
 
 // ============================================================================
@@ -326,4 +552,84 @@ export interface ZapOptions {
   port?: number;
   hostname?: string;
   logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error';
+}
+
+// ============================================================================
+// Streaming Types (Phase 8)
+// ============================================================================
+
+/**
+ * A chunk of streaming data
+ */
+export interface StreamChunk {
+  /** String data to send */
+  data?: string;
+  /** Binary data to send (base64 encoded in IPC) */
+  bytes?: Uint8Array;
+}
+
+/**
+ * Streaming handler response - yields chunks over time
+ */
+export type StreamingHandler<
+  TParams extends Record<string, string> = Record<string, string>,
+  TQuery extends Record<string, string> = Record<string, string>,
+> = (
+  request: ZapRequest<TParams, TQuery>
+) => AsyncIterable<StreamChunk>;
+
+/**
+ * Combined handler type that can be regular or streaming
+ */
+export type AnyHandler<
+  TParams extends Record<string, string> = Record<string, string>,
+  TQuery extends Record<string, string> = Record<string, string>,
+  TResponse = unknown,
+> = Handler<TParams, TQuery, TResponse> | StreamingHandler<TParams, TQuery>;
+
+/**
+ * Check if a value is an async iterable (streaming handler result)
+ */
+export function isAsyncIterable<T>(value: unknown): value is AsyncIterable<T> {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    Symbol.asyncIterator in value
+  );
+}
+
+// ============================================================================
+// WebSocket Handler Types (Phase 8)
+// ============================================================================
+
+/**
+ * WebSocket connection context
+ */
+export interface WsConnection {
+  /** Unique connection ID */
+  id: string;
+  /** Path the WebSocket connected to */
+  path: string;
+  /** Headers from the initial connection */
+  headers: Record<string, string>;
+  /** Send a text message to the client */
+  send(data: string): void;
+  /** Send binary data to the client */
+  sendBinary(data: Uint8Array): void;
+  /** Close the connection */
+  close(code?: number, reason?: string): void;
+}
+
+/**
+ * WebSocket handler definition
+ */
+export interface WsHandler {
+  /** Called when a client connects */
+  onConnect?: (connection: WsConnection) => void | Promise<void>;
+  /** Called when a message is received */
+  onMessage?: (connection: WsConnection, message: string | Uint8Array) => void | Promise<void>;
+  /** Called when the connection closes */
+  onClose?: (connection: WsConnection, code?: number, reason?: string) => void | Promise<void>;
+  /** Called when an error occurs */
+  onError?: (connection: WsConnection, error: Error) => void | Promise<void>;
 }

@@ -85,26 +85,32 @@
 //! ```
 
 pub mod config;
+pub mod connection_pool;
 pub mod error;
 pub mod handler;
 pub mod ipc;
+pub mod metrics;
 pub mod proxy;
 pub mod request;
+pub mod request_id;
 pub mod response;
 pub mod server;
 pub mod r#static;
 pub mod utils;
+pub mod websocket;
 
 // Re-export main types for convenient use
 pub use config::{ServerConfig, ZapConfig};
-pub use error::{ZapError, ZapResult};
+pub use connection_pool::{ConnectionPool, PoolConfig, PoolStats};
+pub use error::{ZapError, ZapResult, ErrorResponse};
 pub use handler::{AsyncHandler, BoxedHandler, Handler, SimpleHandler};
-pub use ipc::{IpcMessage, IpcRequest, IpcServer, IpcClient};
+pub use ipc::{IpcMessage, IpcRequest, IpcServer, IpcClient, IpcEncoding};
 pub use proxy::ProxyHandler;
 pub use request::RequestData;
 pub use response::{Json, ZapResponse};
 pub use server::Zap;
-pub use r#static::{StaticHandler, StaticOptions};
+pub use r#static::{ETagStrategy, StaticHandler, StaticOptions, handle_static_files_with_headers};
+pub use websocket::{WsConfig, WsHandler, handle_websocket_connection, is_websocket_upgrade};
 
 // Re-export important types from core crate for convenience
 pub use zap_core::{Method, StatusCode};
@@ -358,6 +364,7 @@ mod tests {
                     headers
                 },
                 compress: true,
+                ..Default::default()
             })
             
             // Error handling routes

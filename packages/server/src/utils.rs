@@ -13,6 +13,6 @@ pub fn convert_method(method: &hyper::Method) -> Result<Method, ZapError> {
         hyper::Method::DELETE => Ok(Method::DELETE),
         hyper::Method::HEAD => Ok(Method::HEAD),
         hyper::Method::OPTIONS => Ok(Method::OPTIONS),
-        _ => Err(ZapError::Http(format!("Unsupported method: {}", method))),
+        _ => Err(ZapError::http(format!("Unsupported method: {}", method))),
     }
 } 
