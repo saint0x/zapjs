@@ -4,6 +4,7 @@
  * Generates TypeScript files for:
  * - routeTree.ts - Route definitions and type-safe paths
  * - routeManifest.json - JSON manifest for Rust server
+ * - routerConfig.ts - Client-side router configuration
  */
 
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -36,6 +37,10 @@ export function generateRouteTree(options: CodegenOptions): void {
   // Generate JSON manifest for Rust
   const manifest = generateManifest(routeTree);
   writeFileSync(join(outputDir, 'routeManifest.json'), JSON.stringify(manifest, null, 2));
+
+  // Generate client router configuration
+  const routerConfig = generateRouterConfig(routeTree, outputDir);
+  writeFileSync(join(outputDir, 'routerConfig.ts'), routerConfig);
 }
 
 function generateTypeScriptRouteTree(tree: RouteTree, outputDir: string): string {
@@ -560,11 +565,204 @@ export function generateRustManifest(tree: RouteTree): string {
 }
 
 function pathToHandlerName(relativePath: string): string {
-  // Convert routes/api/users.$id.ts to api_users_id
+  // Convert routes/api/users.[id].ts to api_users_id
   return relativePath
     .replace(/^routes\//, '')
     .replace(/\.(tsx?|jsx?)$/, '')
     .replace(/\//g, '_')
     .replace(/\$/g, '')
+    .replace(/\[/g, '')
+    .replace(/\]/g, '')
     .replace(/\./g, '_');
+}
+
+/**
+ * Generate client-side router configuration
+ * This provides the route definitions needed for client-side navigation
+ */
+function generateRouterConfig(tree: RouteTree, outputDir: string): string {
+  const lines: string[] = [
+    '/**',
+    ' * Auto-generated client router configuration',
+    ' * DO NOT EDIT MANUALLY',
+    ' */',
+    '',
+    "import { lazy, type ComponentType } from 'react';",
+    '',
+  ];
+
+  // Generate route interface
+  lines.push('export interface RouteDefinition {');
+  lines.push('  path: string;');
+  lines.push('  pattern: RegExp;');
+  lines.push('  paramNames: string[];');
+  lines.push('  component: React.LazyExoticComponent<ComponentType<any>>;');
+  lines.push('  isIndex: boolean;');
+  lines.push('  layoutPath?: string;');
+  lines.push('  errorComponent?: React.LazyExoticComponent<ComponentType<any>>;');
+  lines.push('  pendingComponent?: React.LazyExoticComponent<ComponentType<any>>;');
+  lines.push('}');
+  lines.push('');
+
+  // Generate component imports
+  lines.push('// Route component imports');
+  for (const route of tree.routes) {
+    if (route.type !== 'page') continue;
+    const varName = routeToVarName(route);
+    const relativePath = getRelativeImportPath(outputDir, route.filePath);
+    lines.push(`const ${varName} = lazy(() => import('${relativePath}'));`);
+
+    if (route.hasErrorComponent) {
+      const errorVarName = routeToErrorVarName(route);
+      const exportName = route.errorComponentExport || 'errorComponent';
+      lines.push(
+        `const ${errorVarName} = lazy(() => import('${relativePath}').then(m => ({ default: m.${exportName} })));`
+      );
+    }
+
+    if (route.hasPendingComponent) {
+      const pendingVarName = routeToPendingVarName(route);
+      const exportName = route.pendingComponentExport || 'pendingComponent';
+      lines.push(
+        `const ${pendingVarName} = lazy(() => import('${relativePath}').then(m => ({ default: m.${exportName} })));`
+      );
+    }
+  }
+  lines.push('');
+
+  // Generate route pattern converter
+  lines.push('/**');
+  lines.push(' * Convert route path pattern to regex');
+  lines.push(' * :param -> named capture group');
+  lines.push(' * *param -> catch-all capture group');
+  lines.push(' */');
+  lines.push('function pathToRegex(path: string): { pattern: RegExp; paramNames: string[] } {');
+  lines.push('  const paramNames: string[] = [];');
+  lines.push('  let regexStr = path');
+  lines.push("    .replace(/\\//g, '\\\\/')");
+  lines.push("    .replace(/:\\w+\\??/g, (match) => {");
+  lines.push("      const isOptional = match.endsWith('?');");
+  lines.push("      const name = match.slice(1).replace('?', '');");
+  lines.push('      paramNames.push(name);');
+  lines.push("      return isOptional ? '([^/]*)?' : '([^/]+)';");
+  lines.push('    })');
+  lines.push("    .replace(/\\*\\w+\\??/g, (match) => {");
+  lines.push("      const isOptional = match.endsWith('?');");
+  lines.push("      const name = match.slice(1).replace('?', '');");
+  lines.push('      paramNames.push(name);');
+  lines.push("      return isOptional ? '(.*)?' : '(.+)';");
+  lines.push('    });');
+  lines.push("  return { pattern: new RegExp(`^${regexStr}$`), paramNames };");
+  lines.push('}');
+  lines.push('');
+
+  // Generate routes array
+  lines.push('// Route definitions with pre-compiled patterns');
+  lines.push('export const routeDefinitions: RouteDefinition[] = [');
+
+  for (const route of tree.routes) {
+    if (route.type !== 'page') continue;
+    const varName = routeToVarName(route);
+    const { pattern, paramNames } = pathToRegexForCodegen(route.urlPath);
+
+    lines.push('  {');
+    lines.push(`    path: '${route.urlPath}',`);
+    lines.push(`    pattern: ${pattern},`);
+    lines.push(`    paramNames: ${JSON.stringify(paramNames)},`);
+    lines.push(`    component: ${varName},`);
+    lines.push(`    isIndex: ${route.isIndex},`);
+
+    if (route.layoutPath) {
+      const layout = tree.layouts.find(l => l.filePath === route.layoutPath);
+      if (layout) {
+        lines.push(`    layoutPath: '${layout.urlPath}',`);
+      }
+    }
+
+    if (route.hasErrorComponent) {
+      lines.push(`    errorComponent: ${routeToErrorVarName(route)},`);
+    }
+
+    if (route.hasPendingComponent) {
+      lines.push(`    pendingComponent: ${routeToPendingVarName(route)},`);
+    }
+
+    lines.push('  },');
+  }
+
+  lines.push('];');
+  lines.push('');
+
+  // Generate path type
+  const paths = tree.routes
+    .filter(r => r.type === 'page')
+    .map(r => `  | '${r.urlPath}'`);
+  lines.push(`export type RoutePath =\n${paths.join('\n')};`);
+  lines.push('');
+
+  // Generate params type map
+  lines.push('// Type-safe params for each route');
+  lines.push('export interface RouteParams {');
+  for (const route of tree.routes) {
+    if (route.type !== 'page') continue;
+    if (route.params.length === 0) {
+      lines.push(`  '${route.urlPath}': Record<string, never>;`);
+    } else {
+      const params = route.params.map(p => `${p.name}: string`).join('; ');
+      lines.push(`  '${route.urlPath}': { ${params} };`);
+    }
+  }
+  lines.push('}');
+  lines.push('');
+
+  // Generate path builder functions
+  lines.push('// Type-safe path builders');
+  for (const route of tree.routes) {
+    if (route.type !== 'page' || route.params.length === 0) continue;
+
+    const fnName = urlPathToFunctionName(route.urlPath);
+    const params = route.params
+      .map(p => `${p.name}${p.optional ? '?' : ''}: string`)
+      .join(', ');
+
+    let template = route.urlPath;
+    for (const param of route.params) {
+      const optionalMarker = param.optional ? '?' : '';
+      if (param.catchAll) {
+        template = template.replace(`*${param.name}${optionalMarker}`, `\${${param.name} || ''}`);
+      } else {
+        template = template.replace(`:${param.name}${optionalMarker}`, `\${${param.name} || ''}`);
+      }
+    }
+
+    lines.push(`export function ${fnName}(${params}): string {`);
+    lines.push(`  return \`${template}\`.replace(/\\/+$/, '') || '/';`);
+    lines.push('}');
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Convert path pattern to regex at codegen time
+ */
+function pathToRegexForCodegen(path: string): { pattern: string; paramNames: string[] } {
+  const paramNames: string[] = [];
+  let regexStr = path
+    .replace(/\//g, '\\/')
+    .replace(/:\w+\??/g, (match) => {
+      const isOptional = match.endsWith('?');
+      const name = match.slice(1).replace('?', '');
+      paramNames.push(name);
+      return isOptional ? '([^/]*)?' : '([^/]+)';
+    })
+    .replace(/\*\w+\??/g, (match) => {
+      const isOptional = match.endsWith('?');
+      const name = match.slice(1).replace('?', '');
+      paramNames.push(name);
+      return isOptional ? '(.*)?' : '(.+)';
+    });
+
+  return { pattern: `/^${regexStr}$/`, paramNames };
 }

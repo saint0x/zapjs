@@ -216,10 +216,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 `;
 
   // Create routes/index.tsx
-  const indexRoute = `export default function HomePage() {
+  const indexRoute = `import { Link } from '@zapjs/runtime';
+
+export default function HomePage() {
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
-      <h1 style={{ color: '#6366f1' }}>Welcome to ZapJS ⚡</h1>
+      <h1 style={{ color: '#6366f1' }}>Welcome to ZapJS</h1>
       <p>Fullstack Rust + React Framework</p>
 
       <h2>Getting Started</h2>
@@ -229,14 +231,20 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <li>API routes go in <code>routes/api/</code></li>
       </ul>
 
-      <h2>TanStack-Style Routing</h2>
+      <h2>File-Based Routing</h2>
       <pre style={{ background: '#f3f4f6', padding: '1rem', borderRadius: '0.5rem', overflow: 'auto' }}>
-{${'`'}routes/index.tsx       → /
-routes/about.tsx       → /about
-routes/$postId.tsx     → /:postId
-routes/api/users.ts    → /api/users
-routes/api/users.$id.ts → /api/users/:id${'`'}}
+{${'`'}routes/index.tsx        → /
+routes/about.tsx        → /about
+routes/[id].tsx         → /:id (dynamic)
+routes/[...slug].tsx    → /*slug (catch-all)
+routes/api/users.ts     → /api/users
+routes/api/users.[id].ts → /api/users/:id${'`'}}
       </pre>
+
+      <h2>Try It</h2>
+      <p>
+        <Link to="/api/hello" style={{ color: '#6366f1' }}>View API Response</Link>
+      </p>
     </div>
   );
 }
@@ -259,7 +267,7 @@ export const POST = async ({ request }: { request: Request }) => {
 };
 `;
 
-  // Create routes/api/users.$id.ts
+  // Create routes/api/users.[id].ts
   const usersApi = `export const GET = async ({ params }: { params: { id: string } }) => {
   return {
     id: params.id,
@@ -323,7 +331,6 @@ serde_json = "1.0"
   },
   routing: {
     dir: './routes',
-    style: 'tanstack',
   },
 };
 `;
@@ -403,7 +410,7 @@ export default defineConfig({
   writeFileSync(join(projectDir, 'routes/__root.tsx'), rootTsx);
   writeFileSync(join(projectDir, 'routes/index.tsx'), indexRoute);
   writeFileSync(join(projectDir, 'routes/api/hello.ts'), helloApi);
-  writeFileSync(join(projectDir, 'routes/api/users.$id.ts'), usersApi);
+  writeFileSync(join(projectDir, 'routes/api/users.[id].ts'), usersApi);
   writeFileSync(join(projectDir, 'package.json'), JSON.stringify(packageJson, null, 2));
   writeFileSync(join(projectDir, 'Cargo.toml'), cargoToml);
   writeFileSync(join(projectDir, 'zap.config.ts'), zapConfig);
@@ -433,20 +440,32 @@ zap dev
 
 \`\`\`
 ${projectName}/
-├── routes/              # File-based routing (TanStack style)
+├── routes/              # File-based routing
 │   ├── __root.tsx       # Root layout
 │   ├── index.tsx        # Home page (/)
+│   ├── [id].tsx         # Dynamic route /:id
 │   └── api/             # API routes
-│       └── hello.ts     # /api/hello
+│       ├── hello.ts     # /api/hello
+│       └── users.[id].ts # /api/users/:id
 ├── server/              # Rust backend
 │   └── src/
 │       └── main.rs
 ├── src/                 # Shared TypeScript
-│   └── generated/       # Auto-generated types
+│   └── generated/       # Auto-generated types & router config
 ├── package.json
 ├── Cargo.toml
 └── zap.config.ts
 \`\`\`
+
+## File Routing Conventions
+
+| File | URL |
+|------|-----|
+| \`index.tsx\` | \`/\` |
+| \`about.tsx\` | \`/about\` |
+| \`[id].tsx\` | \`/:id\` (dynamic) |
+| \`[...slug].tsx\` | \`/*slug\` (catch-all) |
+| \`[[...slug]].tsx\` | \`/*slug?\` (optional catch-all) |
 
 ## Commands
 

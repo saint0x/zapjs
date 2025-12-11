@@ -1,0 +1,889 @@
+{
+  "meta": {
+    "name": "ZapJS Design System",
+    "version": "1.0.0",
+    "description": "Comprehensive design system extracted from the ZapJS landing page (zaptest). This document contains every visual element, color, typography, animation, and component pattern used in the ZapJS brand identity. Use this as the single source of truth for all frontend development.",
+    "lastUpdated": "2024-12-11",
+    "sourceFiles": {
+      "tailwindConfig": "zaptest/tailwind.config.js",
+      "globalStyles": "zaptest/src/index.css",
+      "utilities": "zaptest/src/lib/utils.ts",
+      "components": "zaptest/src/components/*.tsx"
+    },
+    "brandIdentity": {
+      "primaryColor": "Zap Orange (#ec751a)",
+      "secondaryColor": "Rust Red (#e05d4c)",
+      "theme": "Dark mode with glassmorphism effects",
+      "aesthetic": "Modern, technical, high-performance"
+    }
+  },
+
+  "colors": {
+    "palettes": {
+      "zap": {
+        "description": "Primary brand color - vibrant orange representing speed and energy",
+        "usage": "Primary CTAs, highlights, brand elements, active states",
+        "shades": {
+          "50": { "hex": "#fef7ee", "rgb": "254, 247, 238", "usage": "Lightest tint, rarely used" },
+          "100": { "hex": "#fdedd6", "rgb": "253, 237, 214", "usage": "Very light backgrounds" },
+          "200": { "hex": "#f9d7ac", "rgb": "249, 215, 172", "usage": "Light accents" },
+          "300": { "hex": "#f5ba77", "rgb": "245, 186, 119", "usage": "Gradient start for text-gradient" },
+          "400": { "hex": "#f09340", "rgb": "240, 147, 64", "usage": "Secondary text color, 'JS' in logo, gradient start for buttons" },
+          "500": { "hex": "#ec751a", "rgb": "236, 117, 26", "usage": "PRIMARY - Main brand color, buttons, links, focus rings" },
+          "600": { "hex": "#dd5b10", "rgb": "221, 91, 16", "usage": "Gradient end for buttons, hover states" },
+          "700": { "hex": "#b74310", "rgb": "183, 67, 16", "usage": "Dark accents" },
+          "800": { "hex": "#923615", "rgb": "146, 54, 21", "usage": "Very dark accents" },
+          "900": { "hex": "#762f14", "rgb": "118, 47, 20", "usage": "Deep shadows" },
+          "950": { "hex": "#401508", "rgb": "64, 21, 8", "usage": "Darkest, near black" }
+        },
+        "commonUsage": {
+          "primaryButton": "bg-gradient-to-r from-zap-500 to-zap-600",
+          "hoverButton": "hover:from-zap-400 hover:to-zap-500",
+          "textAccent": "text-zap-400",
+          "backgroundTint": "bg-zap-500/10, bg-zap-500/20",
+          "borderAccent": "border-zap-500/20, border-zap-500/30",
+          "shadowGlow": "shadow-zap-500/20, shadow-zap-500/25",
+          "focusRing": "ring-zap-500"
+        }
+      },
+      "rust": {
+        "description": "Secondary brand color - terracotta red representing Rust language",
+        "usage": "Rust-related elements, secondary highlights, architecture diagrams",
+        "shades": {
+          "50": { "hex": "#fdf4f3", "rgb": "253, 244, 243", "usage": "Lightest tint" },
+          "100": { "hex": "#fce7e4", "rgb": "252, 231, 228", "usage": "Very light backgrounds" },
+          "200": { "hex": "#fad3cd", "rgb": "250, 211, 205", "usage": "Light accents" },
+          "300": { "hex": "#f5b3a9", "rgb": "245, 179, 169", "usage": "Gradient start for text-gradient-rust" },
+          "400": { "hex": "#ed8677", "rgb": "237, 134, 119", "usage": "Secondary text" },
+          "500": { "hex": "#e05d4c", "rgb": "224, 93, 76", "usage": "PRIMARY - Rust brand color" },
+          "600": { "hex": "#cc412f", "rgb": "204, 65, 47", "usage": "Darker rust" },
+          "700": { "hex": "#ab3324", "rgb": "171, 51, 36", "usage": "Gradient end for text-gradient-rust" },
+          "800": { "hex": "#8d2d22", "rgb": "141, 45, 34", "usage": "Very dark" },
+          "900": { "hex": "#752b22", "rgb": "117, 43, 34", "usage": "Deep shadows" },
+          "950": { "hex": "#40120d", "rgb": "64, 18, 13", "usage": "Darkest" }
+        },
+        "commonUsage": {
+          "textGradient": "text-gradient-rust",
+          "backgroundTint": "bg-rust-500/10",
+          "borderAccent": "border-rust-500/30",
+          "textColor": "text-rust-400, text-rust-500"
+        }
+      },
+      "carbon": {
+        "description": "Neutral grayscale palette - the foundation of the dark theme",
+        "usage": "Backgrounds, text, borders, cards, all neutral elements",
+        "shades": {
+          "50": { "hex": "#f6f6f6", "rgb": "246, 246, 246", "usage": "Pure white alternative" },
+          "100": { "hex": "#e7e7e7", "rgb": "231, 231, 231", "usage": "Light gray" },
+          "200": { "hex": "#d1d1d1", "rgb": "209, 209, 209", "usage": "Secondary light text" },
+          "300": { "hex": "#b0b0b0", "rgb": "176, 176, 176", "usage": "Muted text, code default" },
+          "400": { "hex": "#888888", "rgb": "136, 136, 136", "usage": "Secondary text, placeholders, icons" },
+          "500": { "hex": "#6d6d6d", "rgb": "109, 109, 109", "usage": "Muted text, comments in code" },
+          "600": { "hex": "#5d5d5d", "rgb": "93, 93, 93", "usage": "Subtle text" },
+          "700": { "hex": "#4f4f4f", "rgb": "79, 79, 79", "usage": "Dark borders" },
+          "800": { "hex": "#454545", "rgb": "69, 69, 69", "usage": "Card backgrounds, borders" },
+          "900": { "hex": "#3d3d3d", "rgb": "61, 61, 61", "usage": "Elevated surfaces" },
+          "950": { "hex": "#0a0a0a", "rgb": "10, 10, 10", "usage": "PRIMARY BACKGROUND - Main page background" }
+        },
+        "commonUsage": {
+          "pageBackground": "bg-carbon-950",
+          "cardBackground": "bg-carbon-900/30, bg-carbon-900/50, bg-carbon-900/80",
+          "elevatedSurface": "bg-carbon-900",
+          "border": "border-carbon-800, border-carbon-800/50",
+          "mutedText": "text-carbon-400, text-carbon-500",
+          "secondaryText": "text-carbon-300",
+          "hoverBackground": "hover:bg-carbon-800/50"
+        }
+      }
+    },
+    "cssVariables": {
+      "description": "HSL-based CSS custom properties defined in index.css :root",
+      "format": "Values are in HSL format: 'hue saturation% lightness%'",
+      "variables": {
+        "--background": { "value": "0 0% 4%", "hex": "#0a0a0a", "usage": "Page background" },
+        "--foreground": { "value": "0 0% 98%", "hex": "#fafafa", "usage": "Primary text" },
+        "--card": { "value": "0 0% 7%", "hex": "#121212", "usage": "Card backgrounds" },
+        "--card-foreground": { "value": "0 0% 98%", "hex": "#fafafa", "usage": "Card text" },
+        "--popover": { "value": "0 0% 7%", "hex": "#121212", "usage": "Popover backgrounds" },
+        "--popover-foreground": { "value": "0 0% 98%", "hex": "#fafafa", "usage": "Popover text" },
+        "--primary": { "value": "27 85% 51%", "hex": "#ec751a", "usage": "Primary actions (zap-500)" },
+        "--primary-foreground": { "value": "0 0% 98%", "hex": "#fafafa", "usage": "Text on primary" },
+        "--secondary": { "value": "0 0% 15%", "hex": "#262626", "usage": "Secondary elements" },
+        "--secondary-foreground": { "value": "0 0% 98%", "hex": "#fafafa", "usage": "Text on secondary" },
+        "--muted": { "value": "0 0% 15%", "hex": "#262626", "usage": "Muted backgrounds" },
+        "--muted-foreground": { "value": "0 0% 64%", "hex": "#a3a3a3", "usage": "Muted text" },
+        "--accent": { "value": "27 85% 51%", "hex": "#ec751a", "usage": "Accent color (same as primary)" },
+        "--accent-foreground": { "value": "0 0% 98%", "hex": "#fafafa", "usage": "Text on accent" },
+        "--destructive": { "value": "0 62% 30%", "hex": "#7a1f1f", "usage": "Error/destructive actions" },
+        "--destructive-foreground": { "value": "0 0% 98%", "hex": "#fafafa", "usage": "Text on destructive" },
+        "--border": { "value": "0 0% 15%", "hex": "#262626", "usage": "Border color" },
+        "--input": { "value": "0 0% 15%", "hex": "#262626", "usage": "Input backgrounds" },
+        "--ring": { "value": "27 85% 51%", "hex": "#ec751a", "usage": "Focus ring color" },
+        "--radius": { "value": "0.75rem", "pixels": "12px", "usage": "Default border radius" }
+      }
+    },
+    "semantic": {
+      "description": "Semantic color mappings for common UI states",
+      "success": { "bg": "bg-emerald-500/20", "text": "text-emerald-400", "hex": "#34d399" },
+      "warning": { "bg": "bg-amber-500/20", "text": "text-amber-400", "hex": "#fbbf24" },
+      "error": { "bg": "bg-rose-500/20", "text": "text-rose-400", "hex": "#fb7185" },
+      "info": { "bg": "bg-sky-500/20", "text": "text-sky-400", "hex": "#38bdf8" }
+    }
+  },
+
+  "typography": {
+    "fontFamilies": {
+      "display": {
+        "family": ["Cabinet Grotesk", "system-ui", "sans-serif"],
+        "usage": "Headings, brand text, navigation, stat values",
+        "weights": ["700 (bold)", "900 (black)"],
+        "source": "Custom font - needs to be loaded",
+        "cssClass": "font-display",
+        "examples": {
+          "heroHeading": "font-display font-black text-5xl sm:text-6xl md:text-7xl lg:text-8xl",
+          "sectionHeading": "font-display font-bold text-3xl sm:text-4xl md:text-5xl",
+          "cardTitle": "font-display font-bold text-xl",
+          "navBrand": "font-display font-bold text-xl sm:text-2xl"
+        }
+      },
+      "body": {
+        "family": ["Satoshi", "system-ui", "sans-serif"],
+        "usage": "Body text, paragraphs, descriptions",
+        "weights": ["400 (normal)", "500 (medium)", "600 (semibold)"],
+        "source": "Custom font - needs to be loaded",
+        "cssClass": "font-body",
+        "appliedTo": "body element by default"
+      },
+      "mono": {
+        "family": ["JetBrains Mono", "Menlo", "monospace"],
+        "usage": "Code blocks, terminal commands, technical text",
+        "weights": ["400 (normal)", "500 (medium)"],
+        "source": "Custom font - needs to be loaded",
+        "cssClass": "font-mono",
+        "examples": {
+          "codeBlock": "font-mono text-sm leading-relaxed",
+          "inlineCode": "font-mono text-sm",
+          "terminal": "font-mono text-xs sm:text-sm"
+        }
+      }
+    },
+    "fontSizes": {
+      "description": "Tailwind default scale with responsive patterns",
+      "scale": {
+        "xs": { "size": "0.75rem", "pixels": "12px", "lineHeight": "1rem" },
+        "sm": { "size": "0.875rem", "pixels": "14px", "lineHeight": "1.25rem" },
+        "base": { "size": "1rem", "pixels": "16px", "lineHeight": "1.5rem" },
+        "lg": { "size": "1.125rem", "pixels": "18px", "lineHeight": "1.75rem" },
+        "xl": { "size": "1.25rem", "pixels": "20px", "lineHeight": "1.75rem" },
+        "2xl": { "size": "1.5rem", "pixels": "24px", "lineHeight": "2rem" },
+        "3xl": { "size": "1.875rem", "pixels": "30px", "lineHeight": "2.25rem" },
+        "4xl": { "size": "2.25rem", "pixels": "36px", "lineHeight": "2.5rem" },
+        "5xl": { "size": "3rem", "pixels": "48px", "lineHeight": "1" },
+        "6xl": { "size": "3.75rem", "pixels": "60px", "lineHeight": "1" },
+        "7xl": { "size": "4.5rem", "pixels": "72px", "lineHeight": "1" },
+        "8xl": { "size": "6rem", "pixels": "96px", "lineHeight": "1" },
+        "9xl": { "size": "8rem", "pixels": "128px", "lineHeight": "1" }
+      },
+      "responsivePatterns": {
+        "heroHeading": "text-5xl sm:text-6xl md:text-7xl lg:text-8xl",
+        "sectionHeading": "text-3xl sm:text-4xl md:text-5xl",
+        "subheading": "text-xl sm:text-2xl",
+        "bodyLarge": "text-lg sm:text-xl md:text-2xl",
+        "body": "text-base",
+        "small": "text-sm",
+        "caption": "text-xs"
+      }
+    },
+    "fontWeights": {
+      "black": { "value": "900", "class": "font-black", "usage": "Hero headings" },
+      "bold": { "value": "700", "class": "font-bold", "usage": "Section headings, emphasis" },
+      "semibold": { "value": "600", "class": "font-semibold", "usage": "Buttons, labels" },
+      "medium": { "value": "500", "class": "font-medium", "usage": "Navigation, subtle emphasis" },
+      "normal": { "value": "400", "class": "font-normal", "usage": "Body text" }
+    },
+    "lineHeights": {
+      "none": { "value": "1", "class": "leading-none", "usage": "Large display text" },
+      "tight": { "value": "1.25", "class": "leading-tight", "usage": "Headings" },
+      "snug": { "value": "1.375", "class": "leading-snug", "usage": "Subheadings" },
+      "normal": { "value": "1.5", "class": "leading-normal", "usage": "Default" },
+      "relaxed": { "value": "1.625", "class": "leading-relaxed", "usage": "Body text, code blocks" },
+      "loose": { "value": "2", "class": "leading-loose", "usage": "Spacious text" }
+    },
+    "letterSpacing": {
+      "tighter": { "value": "-0.05em", "class": "tracking-tighter" },
+      "tight": { "value": "-0.025em", "class": "tracking-tight", "usage": "Headings" },
+      "normal": { "value": "0", "class": "tracking-normal" },
+      "wide": { "value": "0.025em", "class": "tracking-wide" },
+      "wider": { "value": "0.05em", "class": "tracking-wider", "usage": "Uppercase labels" },
+      "widest": { "value": "0.1em", "class": "tracking-widest" }
+    }
+  },
+
+  "spacing": {
+    "scale": {
+      "description": "Tailwind default spacing scale (rem-based, 1 unit = 0.25rem = 4px)",
+      "values": {
+        "0": "0px",
+        "0.5": "0.125rem (2px)",
+        "1": "0.25rem (4px)",
+        "1.5": "0.375rem (6px)",
+        "2": "0.5rem (8px)",
+        "2.5": "0.625rem (10px)",
+        "3": "0.75rem (12px)",
+        "3.5": "0.875rem (14px)",
+        "4": "1rem (16px)",
+        "5": "1.25rem (20px)",
+        "6": "1.5rem (24px)",
+        "7": "1.75rem (28px)",
+        "8": "2rem (32px)",
+        "9": "2.25rem (36px)",
+        "10": "2.5rem (40px)",
+        "11": "2.75rem (44px)",
+        "12": "3rem (48px)",
+        "14": "3.5rem (56px)",
+        "16": "4rem (64px)",
+        "20": "5rem (80px)",
+        "24": "6rem (96px)",
+        "28": "7rem (112px)",
+        "32": "8rem (128px)",
+        "36": "9rem (144px)",
+        "40": "10rem (160px)",
+        "44": "11rem (176px)",
+        "48": "12rem (192px)",
+        "52": "13rem (208px)",
+        "56": "14rem (224px)",
+        "60": "15rem (240px)",
+        "64": "16rem (256px)",
+        "72": "18rem (288px)",
+        "80": "20rem (320px)",
+        "96": "24rem (384px)"
+      }
+    },
+    "patterns": {
+      "buttons": {
+        "small": "px-4 py-2",
+        "medium": "px-5 py-2.5",
+        "large": "px-8 py-4"
+      },
+      "cards": {
+        "compact": "p-4",
+        "default": "p-6",
+        "spacious": "p-6 sm:p-8"
+      },
+      "sections": {
+        "verticalPadding": "py-16 sm:py-20 md:py-24 lg:py-32",
+        "horizontalPadding": "px-4 sm:px-6 lg:px-8"
+      },
+      "gaps": {
+        "tight": "gap-2",
+        "default": "gap-4",
+        "relaxed": "gap-6",
+        "spacious": "gap-8 sm:gap-12"
+      },
+      "container": {
+        "maxWidth": "max-w-7xl",
+        "centered": "mx-auto",
+        "fullPattern": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+      }
+    }
+  },
+
+  "borderRadius": {
+    "scale": {
+      "none": { "value": "0px", "class": "rounded-none" },
+      "sm": { "value": "0.125rem (2px)", "class": "rounded-sm" },
+      "default": { "value": "0.25rem (4px)", "class": "rounded" },
+      "md": { "value": "0.375rem (6px)", "class": "rounded-md" },
+      "lg": { "value": "0.5rem (8px)", "class": "rounded-lg", "usage": "Inputs, small elements" },
+      "xl": { "value": "0.75rem (12px)", "class": "rounded-xl", "usage": "Containers, code blocks" },
+      "2xl": { "value": "1rem (16px)", "class": "rounded-2xl", "usage": "Cards, modals" },
+      "3xl": { "value": "1.5rem (24px)", "class": "rounded-3xl", "usage": "Large containers" },
+      "full": { "value": "9999px", "class": "rounded-full", "usage": "Pills, badges, avatars" }
+    },
+    "defaultRadius": {
+      "cssVariable": "--radius: 0.75rem",
+      "pixels": "12px",
+      "class": "rounded-xl"
+    }
+  },
+
+  "shadows": {
+    "utilities": {
+      "glow-zap": {
+        "description": "Multi-layer orange glow effect for zap-branded elements",
+        "css": "box-shadow: 0 0 20px rgba(236, 117, 26, 0.15), 0 0 40px rgba(236, 117, 26, 0.1), 0 0 60px rgba(236, 117, 26, 0.05)",
+        "class": ".glow-zap",
+        "usage": "Buttons, featured elements"
+      },
+      "glow-zap-lg": {
+        "description": "Large orange glow for hero elements",
+        "css": "box-shadow: 0 0 40px rgba(236, 117, 26, 0.2), 0 0 80px rgba(236, 117, 26, 0.15), 0 0 120px rgba(236, 117, 26, 0.1)",
+        "class": ".glow-zap-lg",
+        "usage": "Hero buttons, featured cards"
+      }
+    },
+    "tailwindShadows": {
+      "sm": "0 1px 2px 0 rgb(0 0 0 / 0.05)",
+      "default": "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+      "md": "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)",
+      "lg": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+      "xl": "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
+      "2xl": "0 25px 50px -12px rgb(0 0 0 / 0.25)"
+    },
+    "coloredShadows": {
+      "description": "Tailwind colored shadow utilities used in components",
+      "examples": {
+        "primaryButton": "shadow-lg shadow-zap-500/20",
+        "heroButton": "shadow-xl shadow-zap-500/25",
+        "hoverGlow": "shadow-2xl shadow-zap-500/30"
+      }
+    },
+    "focusRing": {
+      "pattern": "ring-2 ring-zap-500 ring-offset-2 ring-offset-carbon-950",
+      "description": "Focus visible state for interactive elements"
+    }
+  },
+
+  "gradients": {
+    "text": {
+      "zap": {
+        "class": ".text-gradient",
+        "css": "background-image: linear-gradient(135deg, #f5ba77 0%, #ec751a 50%, #dd5b10 100%)",
+        "colors": ["#f5ba77 (zap-300)", "#ec751a (zap-500)", "#dd5b10 (zap-600)"],
+        "usage": "Highlighted text, hero accents"
+      },
+      "rust": {
+        "class": ".text-gradient-rust",
+        "css": "background-image: linear-gradient(135deg, #f5b3a9 0%, #e05d4c 50%, #ab3324 100%)",
+        "colors": ["#f5b3a9 (rust-300)", "#e05d4c (rust-500)", "#ab3324 (rust-700)"],
+        "usage": "Rust-related highlighted text"
+      }
+    },
+    "background": {
+      "primaryButton": {
+        "class": "bg-gradient-to-r from-zap-500 to-zap-600",
+        "hover": "hover:from-zap-400 hover:to-zap-500",
+        "colors": ["#ec751a → #dd5b10"],
+        "usage": "Primary CTA buttons"
+      },
+      "logoBadge": {
+        "class": "bg-gradient-to-br from-zap-400 to-zap-600",
+        "colors": ["#f09340 → #dd5b10"],
+        "usage": "Logo icon background"
+      },
+      "sectionAccent": {
+        "class": "bg-gradient-to-b from-transparent via-zap-500/5 to-transparent",
+        "usage": "Subtle section dividers"
+      },
+      "fadeBottom": {
+        "class": "bg-gradient-to-t from-carbon-950 to-transparent",
+        "usage": "Bottom fade effects"
+      },
+      "codeGlow": {
+        "class": "bg-gradient-to-r from-zap-500/20 via-violet-500/20 to-sky-500/20",
+        "usage": "Glow behind code editor"
+      },
+      "radial": {
+        "class": "bg-gradient-radial",
+        "css": "background-image: radial-gradient(var(--tw-gradient-stops))",
+        "usage": "Circular gradient effects"
+      }
+    },
+    "border": {
+      "class": ".border-gradient",
+      "css": "border: 1px solid transparent; background: linear-gradient(var(--background), var(--background)) padding-box, linear-gradient(135deg, rgba(236, 117, 26, 0.5), rgba(236, 117, 26, 0.1)) border-box",
+      "usage": "Gradient border effect on cards"
+    }
+  },
+
+  "animations": {
+    "keyframes": {
+      "gradient-x": {
+        "description": "Horizontal gradient animation",
+        "duration": "15s ease infinite",
+        "keyframes": {
+          "0%, 100%": { "background-size": "200% 200%", "background-position": "left center" },
+          "50%": { "background-size": "200% 200%", "background-position": "right center" }
+        }
+      },
+      "gradient-y": {
+        "description": "Vertical gradient animation",
+        "duration": "15s ease infinite",
+        "keyframes": {
+          "0%, 100%": { "background-size": "400% 400%", "background-position": "center top" },
+          "50%": { "background-size": "200% 200%", "background-position": "center center" }
+        }
+      },
+      "gradient-xy": {
+        "description": "Diagonal gradient animation",
+        "duration": "15s ease infinite",
+        "keyframes": {
+          "0%, 100%": { "background-size": "400% 400%", "background-position": "left center" },
+          "50%": { "background-size": "200% 200%", "background-position": "right center" }
+        }
+      },
+      "float": {
+        "description": "Floating up/down effect",
+        "duration": "6s ease-in-out infinite",
+        "keyframes": {
+          "0%, 100%": { "transform": "translateY(0)" },
+          "50%": { "transform": "translateY(-20px)" }
+        }
+      },
+      "shimmer": {
+        "description": "Shimmer/shine effect",
+        "duration": "2s linear infinite",
+        "keyframes": {
+          "0%": { "transform": "translateX(-100%)" },
+          "100%": { "transform": "translateX(100%)" }
+        }
+      },
+      "glow": {
+        "description": "Pulsing glow effect",
+        "duration": "2s ease-in-out infinite alternate",
+        "keyframes": {
+          "0%": { "opacity": "0.5", "filter": "blur(20px)" },
+          "100%": { "opacity": "1", "filter": "blur(25px)" }
+        }
+      },
+      "pulse-slow": {
+        "description": "Slow pulse effect",
+        "duration": "4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+        "keyframes": "Tailwind default pulse"
+      },
+      "animateIn": {
+        "description": "Fade in with slide up",
+        "duration": "0.5s ease-out forwards",
+        "keyframes": {
+          "from": { "opacity": "0", "transform": "translateY(20px)" },
+          "to": { "opacity": "1", "transform": "translateY(0)" }
+        },
+        "class": ".animate-in"
+      }
+    },
+    "utilities": {
+      "animate-gradient-x": "gradient-x 15s ease infinite",
+      "animate-gradient-y": "gradient-y 15s ease infinite",
+      "animate-gradient-xy": "gradient-xy 15s ease infinite",
+      "animate-float": "float 6s ease-in-out infinite",
+      "animate-pulse-slow": "pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+      "animate-shimmer": "shimmer 2s linear infinite",
+      "animate-glow": "glow 2s ease-in-out infinite alternate"
+    },
+    "staggerDelays": {
+      "description": "Animation delay classes for staggered entrance effects",
+      "classes": {
+        ".stagger-1": "animation-delay: 0.1s",
+        ".stagger-2": "animation-delay: 0.2s",
+        ".stagger-3": "animation-delay: 0.3s",
+        ".stagger-4": "animation-delay: 0.4s",
+        ".stagger-5": "animation-delay: 0.5s",
+        ".stagger-6": "animation-delay: 0.6s"
+      }
+    },
+    "framerMotion": {
+      "description": "Common Framer Motion animation patterns used in components",
+      "entrance": {
+        "fadeInUp": {
+          "initial": { "opacity": 0, "y": 20 },
+          "animate": { "opacity": 1, "y": 0 },
+          "transition": { "duration": 0.5 }
+        },
+        "fadeInUpLarge": {
+          "initial": { "opacity": 0, "y": 40 },
+          "animate": { "opacity": 1, "y": 0 },
+          "transition": { "duration": 0.6 }
+        },
+        "staggeredChildren": {
+          "transition": { "delay": "index * 0.1" }
+        }
+      },
+      "hover": {
+        "scaleUp": {
+          "whileHover": { "scale": 1.02 },
+          "whileTap": { "scale": 0.98 }
+        },
+        "scaleUpLarge": {
+          "whileHover": { "scale": 1.05 },
+          "whileTap": { "scale": 0.95 }
+        }
+      },
+      "scroll": {
+        "parallax": {
+          "description": "Use useScroll() with useTransform() for scroll-based effects",
+          "example": "const backgroundY = useTransform(scrollYProgress, [0, 1], ['0%', '100%'])"
+        }
+      },
+      "spring": {
+        "bouncy": { "type": "spring", "stiffness": 100, "damping": 20 },
+        "smooth": { "type": "spring", "stiffness": 200, "damping": 30 }
+      }
+    }
+  },
+
+  "effects": {
+    "blur": {
+      "description": "Backdrop blur values for glassmorphism effects",
+      "values": {
+        "none": "backdrop-blur-none",
+        "sm": "backdrop-blur-sm (4px)",
+        "default": "backdrop-blur (8px)",
+        "md": "backdrop-blur-md (12px)",
+        "lg": "backdrop-blur-lg (16px)",
+        "xl": "backdrop-blur-xl (24px)",
+        "2xl": "backdrop-blur-2xl (40px)",
+        "3xl": "backdrop-blur-3xl (64px)"
+      },
+      "commonPatterns": {
+        "navbar": "backdrop-blur-xl",
+        "card": "backdrop-blur-sm",
+        "modal": "backdrop-blur-xl"
+      }
+    },
+    "opacity": {
+      "description": "Common transparency values for layered effects",
+      "backgroundOpacity": {
+        "veryLight": "/10 (10%)",
+        "light": "/20 (20%)",
+        "medium": "/30 (30%)",
+        "semiTransparent": "/50 (50%)",
+        "mostlyOpaque": "/80 (80%)",
+        "nearlyOpaque": "/90 (90%)"
+      },
+      "examples": {
+        "cardBackground": "bg-carbon-900/30",
+        "glassmorphism": "bg-carbon-900/50 backdrop-blur-sm",
+        "solidCard": "bg-carbon-900/80",
+        "subtleBorder": "border-carbon-800/50",
+        "colorTint": "bg-zap-500/10"
+      }
+    },
+    "noise": {
+      "description": "SVG-based noise texture overlay for visual depth",
+      "class": ".noise-overlay",
+      "css": {
+        "pseudoElement": "::before",
+        "backgroundImage": "SVG fractalNoise (baseFrequency: 0.65, numOctaves: 3)",
+        "opacity": "0.03",
+        "mixBlendMode": "overlay",
+        "pointerEvents": "none"
+      },
+      "inlineNoise": {
+        "description": "Inline noise pattern used in App.tsx",
+        "baseFrequency": "0.7",
+        "numOctaves": "4",
+        "opacity": "0.015"
+      }
+    },
+    "grid": {
+      "bg-grid": {
+        "description": "Subtle background grid pattern",
+        "class": ".bg-grid",
+        "css": "background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+        "backgroundSize": "64px 64px"
+      },
+      "bg-grid-dense": {
+        "description": "Denser grid pattern",
+        "class": ".bg-grid-dense",
+        "css": "background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)",
+        "backgroundSize": "24px 24px"
+      }
+    }
+  },
+
+  "components": {
+    "navbar": {
+      "container": {
+        "base": "fixed top-0 left-0 right-0 z-50 transition-all duration-500",
+        "transparent": "bg-transparent",
+        "scrolled": "bg-carbon-950/80 backdrop-blur-xl border-b border-carbon-800/50"
+      },
+      "innerContainer": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+      "height": "h-16 sm:h-20",
+      "logo": {
+        "iconContainer": "w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-zap-400 to-zap-600 rounded-xl",
+        "iconSize": "w-5 h-5 sm:w-6 sm:h-6",
+        "text": "font-display font-bold text-xl sm:text-2xl text-white",
+        "accentText": "text-zap-400"
+      },
+      "navLink": {
+        "base": "px-4 py-2 text-sm font-medium text-carbon-400 hover:text-white transition-colors",
+        "activeIndicator": "h-px bg-gradient-to-r from-transparent via-zap-500 to-transparent"
+      },
+      "mobileMenu": {
+        "toggle": "p-2 text-carbon-400 hover:text-white",
+        "container": "border-t border-carbon-800/50",
+        "link": "block px-4 py-2 text-carbon-400 hover:text-white hover:bg-carbon-800/50 rounded-lg"
+      }
+    },
+    "hero": {
+      "badge": "px-4 py-2 bg-carbon-900/50 backdrop-blur-sm border border-carbon-800 rounded-full text-sm text-carbon-300",
+      "heading": "font-display font-black text-5xl sm:text-6xl md:text-7xl lg:text-8xl text-white",
+      "subheading": "text-lg sm:text-xl md:text-2xl text-carbon-400",
+      "primaryButton": "px-8 py-4 bg-gradient-to-r from-zap-500 to-zap-600 hover:from-zap-400 hover:to-zap-500 text-white font-semibold rounded-full shadow-xl shadow-zap-500/25",
+      "secondaryButton": "px-8 py-4 bg-carbon-900/50 backdrop-blur-sm border border-carbon-700 hover:bg-carbon-800/50 text-white font-semibold rounded-full",
+      "terminalBox": "px-6 py-3 bg-carbon-900/80 backdrop-blur-sm border border-carbon-800 rounded-xl font-mono text-sm"
+    },
+    "featureCard": {
+      "container": "p-6 sm:p-8 bg-carbon-900/30 backdrop-blur-sm border border-carbon-800/50 rounded-2xl hover:border-[color]-500/30 transition-all duration-300",
+      "iconContainer": "w-12 h-12 bg-[color]-500/10 rounded-xl flex items-center justify-center",
+      "icon": "w-6 h-6 text-[color]-400",
+      "title": "font-display font-bold text-xl text-white",
+      "description": "text-carbon-400",
+      "colorVariants": {
+        "zap": { "bg": "bg-zap-500/10", "border": "border-zap-500/20", "text": "text-zap-400", "hoverBorder": "hover:border-zap-500/30" },
+        "sky": { "bg": "bg-sky-500/10", "border": "border-sky-500/20", "text": "text-sky-400", "hoverBorder": "hover:border-sky-500/30" },
+        "emerald": { "bg": "bg-emerald-500/10", "border": "border-emerald-500/20", "text": "text-emerald-400", "hoverBorder": "hover:border-emerald-500/30" },
+        "violet": { "bg": "bg-violet-500/10", "border": "border-violet-500/20", "text": "text-violet-400", "hoverBorder": "hover:border-violet-500/30" },
+        "rose": { "bg": "bg-rose-500/10", "border": "border-rose-500/20", "text": "text-rose-400", "hoverBorder": "hover:border-rose-500/30" },
+        "amber": { "bg": "bg-amber-500/10", "border": "border-amber-500/20", "text": "text-amber-400", "hoverBorder": "hover:border-amber-500/30" },
+        "cyan": { "bg": "bg-cyan-500/10", "border": "border-cyan-500/20", "text": "text-cyan-400", "hoverBorder": "hover:border-cyan-500/30" },
+        "pink": { "bg": "bg-pink-500/10", "border": "border-pink-500/20", "text": "text-pink-400", "hoverBorder": "hover:border-pink-500/30" }
+      }
+    },
+    "codeDemo": {
+      "window": "bg-carbon-900/80 backdrop-blur-xl border border-carbon-800 rounded-2xl overflow-hidden",
+      "windowHeader": "flex items-center gap-2 px-4 py-3 bg-carbon-900/50 border-b border-carbon-800",
+      "windowControls": {
+        "close": "w-3 h-3 rounded-full bg-red-500/80",
+        "minimize": "w-3 h-3 rounded-full bg-yellow-500/80",
+        "maximize": "w-3 h-3 rounded-full bg-green-500/80"
+      },
+      "tabs": {
+        "container": "flex border-b border-carbon-800",
+        "tab": "px-4 sm:px-6 py-3 text-sm font-medium",
+        "activeTab": "text-white border-b-2 border-zap-500",
+        "inactiveTab": "text-carbon-400 hover:text-white"
+      },
+      "codeBlock": "p-4 sm:p-6 font-mono text-sm leading-relaxed overflow-x-auto",
+      "glowBackground": "-inset-4 bg-gradient-to-r from-zap-500/20 via-violet-500/20 to-sky-500/20 rounded-3xl blur-2xl"
+    },
+    "examples": {
+      "card": "bg-carbon-900/30 backdrop-blur-sm border border-carbon-800/50 rounded-2xl overflow-hidden",
+      "cardHeader": "p-5 min-h-[140px] flex flex-col",
+      "methodBadge": {
+        "base": "px-2 py-0.5 text-xs font-mono rounded",
+        "GET": "bg-emerald-500/20 text-emerald-400",
+        "POST": "bg-sky-500/20 text-sky-400",
+        "PUT": "bg-amber-500/20 text-amber-400",
+        "DELETE": "bg-rose-500/20 text-rose-400"
+      },
+      "endpoint": "font-mono text-sm text-carbon-300",
+      "expandedContent": "border-t border-carbon-800/50 p-5",
+      "liveButton": "px-3 py-1 text-xs bg-zap-500/20 text-zap-400 rounded-full hover:bg-zap-500/30"
+    },
+    "architecture": {
+      "layerCard": "p-6 rounded-2xl",
+      "iconContainer": "w-12 h-12 rounded-xl flex items-center justify-center",
+      "colorVariants": {
+        "sky": { "bg": "bg-sky-500/10", "border": "border-sky-500/30", "icon": "bg-sky-500/20", "text": "text-sky-400" },
+        "zap": { "bg": "bg-zap-500/10", "border": "border-zap-500/30", "icon": "bg-zap-500/20", "text": "text-zap-400" },
+        "rust": { "bg": "bg-rust-500/10", "border": "border-rust-500/30", "icon": "bg-rust-500/20", "text": "text-rust-400" },
+        "violet": { "bg": "bg-violet-500/10", "border": "border-violet-500/30", "icon": "bg-violet-500/20", "text": "text-violet-400" }
+      },
+      "connectorLine": "left-1/2 -bottom-8 w-px h-8 bg-gradient-to-b"
+    },
+    "performance": {
+      "metricCard": "p-4 bg-carbon-900/50 border border-carbon-800 rounded-xl",
+      "benchmarkBar": "p-4 sm:p-5 rounded-xl border",
+      "highlightBar": "bg-zap-500/5 border-zap-500/20",
+      "colorBars": {
+        "zap": "bg-gradient-to-r from-zap-500 to-zap-400",
+        "emerald": "bg-gradient-to-r from-emerald-500 to-emerald-400",
+        "sky": "bg-gradient-to-r from-sky-500 to-sky-400",
+        "violet": "bg-gradient-to-r from-violet-500 to-violet-400"
+      }
+    },
+    "getStarted": {
+      "terminalWindow": "bg-carbon-900/90 backdrop-blur-xl border border-carbon-800 rounded-2xl overflow-hidden",
+      "terminalHeader": "flex items-center gap-2 px-4 py-3 bg-carbon-900/50 border-b border-carbon-800",
+      "commandBox": "p-3 bg-carbon-800/50 rounded-lg",
+      "prompt": "text-emerald-400",
+      "command": "text-white",
+      "output": "text-carbon-400",
+      "successMessage": "text-emerald-400"
+    },
+    "footer": {
+      "container": "border-t border-carbon-800/50",
+      "background": "bg-gradient-to-t from-carbon-950 to-transparent",
+      "linkGroup": "space-y-3",
+      "linkHeading": "text-sm font-semibold text-white",
+      "link": "text-sm text-carbon-400 hover:text-white transition-colors",
+      "socialIcon": "p-2 bg-carbon-800 hover:bg-carbon-700 rounded-lg text-carbon-400 hover:text-white transition-colors",
+      "bottomBar": "border-t border-carbon-800/50 mt-12 pt-8",
+      "copyright": "text-sm text-carbon-500"
+    }
+  },
+
+  "syntaxHighlighting": {
+    "description": "Code syntax highlighting colors used in CodeDemo and code blocks",
+    "source": "zaptest/src/lib/utils.ts - highlightCode function",
+    "colors": {
+      "comment": { "hex": "#6b7280", "tailwind": "text-carbon-500", "pattern": "// comments" },
+      "string": { "hex": "#34d399", "tailwind": "text-emerald-400", "pattern": "'strings' and \"strings\"" },
+      "keyword": { "hex": "#a78bfa", "tailwind": "text-violet-400", "pattern": "const, let, function, return, async, await, export, import, from, if, else" },
+      "type": { "hex": "#38bdf8", "tailwind": "text-sky-400", "pattern": "Request, Response, Promise, Router, string, number, boolean" },
+      "special": { "hex": "#fb923c", "tailwind": "text-orange-400", "pattern": "#[attribute], @decorator" },
+      "tag": { "hex": "#f472b6", "tailwind": "text-pink-400", "pattern": "<JSXTags>" },
+      "bracket": { "hex": "#9ca3af", "tailwind": "text-carbon-400", "pattern": "{ } ( ) [ ]" },
+      "default": { "hex": "#d1d5db", "tailwind": "text-carbon-300", "pattern": "default text" }
+    },
+    "languages": {
+      "typescript": ["const", "let", "function", "return", "async", "await", "export", "import", "from", "if", "else", "new", "typeof", "interface", "type"],
+      "rust": ["fn", "let", "mut", "pub", "use", "impl", "struct", "enum", "match", "if", "else", "return", "async", "await", "mod", "crate", "self", "super"]
+    }
+  },
+
+  "responsive": {
+    "breakpoints": {
+      "sm": { "minWidth": "640px", "description": "Small tablets, large phones landscape" },
+      "md": { "minWidth": "768px", "description": "Tablets" },
+      "lg": { "minWidth": "1024px", "description": "Laptops, small desktops" },
+      "xl": { "minWidth": "1280px", "description": "Desktops" },
+      "2xl": { "minWidth": "1536px", "description": "Large desktops" }
+    },
+    "patterns": {
+      "hideOnMobile": "hidden sm:flex, hidden md:block",
+      "showOnMobile": "flex sm:hidden, block md:hidden",
+      "responsiveText": "text-sm sm:text-base md:text-lg",
+      "responsivePadding": "px-4 sm:px-6 lg:px-8",
+      "responsiveGrid": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+      "responsiveWidth": "w-full sm:w-auto",
+      "responsiveGap": "gap-4 sm:gap-6 lg:gap-8"
+    }
+  },
+
+  "utilities": {
+    "customClasses": {
+      ".text-gradient": {
+        "description": "Orange gradient text effect",
+        "css": "@apply bg-clip-text text-transparent; background-image: linear-gradient(135deg, #f5ba77 0%, #ec751a 50%, #dd5b10 100%)"
+      },
+      ".text-gradient-rust": {
+        "description": "Rust red gradient text effect",
+        "css": "@apply bg-clip-text text-transparent; background-image: linear-gradient(135deg, #f5b3a9 0%, #e05d4c 50%, #ab3324 100%)"
+      },
+      ".bg-grid": {
+        "description": "Subtle 64px grid background",
+        "css": "background-image: linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px); background-size: 64px 64px"
+      },
+      ".bg-grid-dense": {
+        "description": "Dense 24px grid background",
+        "css": "background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 24px 24px"
+      },
+      ".glow-zap": {
+        "description": "Multi-layer orange glow",
+        "css": "box-shadow: 0 0 20px rgba(236, 117, 26, 0.15), 0 0 40px rgba(236, 117, 26, 0.1), 0 0 60px rgba(236, 117, 26, 0.05)"
+      },
+      ".glow-zap-lg": {
+        "description": "Large orange glow",
+        "css": "box-shadow: 0 0 40px rgba(236, 117, 26, 0.2), 0 0 80px rgba(236, 117, 26, 0.15), 0 0 120px rgba(236, 117, 26, 0.1)"
+      },
+      ".border-gradient": {
+        "description": "Gradient border effect",
+        "css": "border: 1px solid transparent; background: linear-gradient(var(--background), var(--background)) padding-box, linear-gradient(135deg, rgba(236, 117, 26, 0.5), rgba(236, 117, 26, 0.1)) border-box"
+      },
+      ".noise-overlay": {
+        "description": "Subtle noise texture overlay",
+        "css": "position: relative; &::before { content: ''; position: absolute; inset: 0; background-image: SVG noise; opacity: 0.03; pointer-events: none; mix-blend-mode: overlay; }"
+      },
+      ".animate-in": {
+        "description": "Fade in with slide up",
+        "css": "animation: animateIn 0.5s ease-out forwards"
+      },
+      ".hide-scrollbar": {
+        "description": "Hide scrollbar across browsers",
+        "css": "-ms-overflow-style: none; scrollbar-width: none; &::-webkit-scrollbar { display: none; }"
+      }
+    },
+    "scrollbar": {
+      "width": "8px",
+      "height": "8px",
+      "track": "background: rgba(255, 255, 255, 0.02)",
+      "thumb": "background: rgba(255, 255, 255, 0.1); border-radius: 4px",
+      "thumbHover": "background: rgba(255, 255, 255, 0.2)"
+    },
+    "focus": {
+      "pattern": "*:focus-visible { @apply outline-none ring-2 ring-zap-500 ring-offset-2 ring-offset-carbon-950; }",
+      "description": "Focus visible state with orange ring and dark offset"
+    },
+    "selection": {
+      "pattern": "::selection { @apply bg-zap-500/30 text-white; }",
+      "description": "Orange tinted text selection"
+    },
+    "smoothScroll": {
+      "pattern": "html { scroll-behavior: smooth; }",
+      "description": "Smooth scrolling for anchor links"
+    },
+    "defaultBorder": {
+      "pattern": "* { border-color: rgba(255, 255, 255, 0.1); }",
+      "description": "Subtle white border as default"
+    }
+  },
+
+  "layout": {
+    "container": {
+      "pattern": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+      "maxWidth": "1280px",
+      "description": "Centered container with responsive padding"
+    },
+    "grid": {
+      "twoColumn": "grid grid-cols-1 md:grid-cols-2 gap-6",
+      "threeColumn": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6",
+      "fourColumn": "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6",
+      "sixColumn": "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8",
+      "autoFit": "grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-6"
+    },
+    "flex": {
+      "center": "flex items-center justify-center",
+      "between": "flex items-center justify-between",
+      "start": "flex items-center justify-start",
+      "column": "flex flex-col",
+      "wrap": "flex flex-wrap"
+    },
+    "stack": {
+      "tight": "space-y-2",
+      "default": "space-y-4",
+      "relaxed": "space-y-6",
+      "spacious": "space-y-8"
+    }
+  },
+
+  "icons": {
+    "library": "Lucide React",
+    "package": "lucide-react",
+    "commonIcons": {
+      "brand": ["Zap"],
+      "navigation": ["Menu", "X", "ChevronRight", "ChevronLeft", "ChevronDown", "ArrowRight", "ExternalLink"],
+      "features": ["Cpu", "Layers", "Code2", "Terminal", "FileCode2", "Workflow", "Rocket", "Server", "Globe", "Shield", "Gauge"],
+      "actions": ["Copy", "Check", "Search", "Github", "Play"],
+      "status": ["CheckCircle", "AlertCircle", "Info"]
+    },
+    "sizes": {
+      "xs": "w-3 h-3",
+      "sm": "w-4 h-4",
+      "default": "w-5 h-5",
+      "md": "w-6 h-6",
+      "lg": "w-8 h-8",
+      "xl": "w-10 h-10",
+      "2xl": "w-12 h-12"
+    }
+  },
+
+  "dependencies": {
+    "required": {
+      "react": "^18.x",
+      "framer-motion": "^11.x",
+      "lucide-react": "^0.460.x",
+      "tailwindcss": "^3.4.x",
+      "class-variance-authority": "^0.7.x",
+      "clsx": "^2.x",
+      "tailwind-merge": "^2.x"
+    },
+    "fonts": {
+      "Cabinet Grotesk": "https://www.fontshare.com/fonts/cabinet-grotesk",
+      "Satoshi": "https://www.fontshare.com/fonts/satoshi",
+      "JetBrains Mono": "https://www.jetbrains.com/lp/mono/"
+    }
+  }
+}

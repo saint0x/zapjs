@@ -1,20 +1,22 @@
 /**
- * Route file scanner for ZapJS (TanStack style conventions)
+ * Route file scanner for ZapJS (Next.js style conventions)
  *
- * TanStack Router Conventions:
+ * File Routing Conventions:
  * - index.tsx          → /
  * - about.tsx          → /about
- * - $param.tsx         → /:param (required)
- * - $param?.tsx        → /:param? (optional)
- * - $...rest.tsx       → /*rest (required catch-all)
- * - $...rest?.tsx      → /*rest? (optional catch-all)
- * - posts.$postId.tsx  → /posts/:postId
+ * - [param].tsx        → /:param (required dynamic segment)
+ * - [param]?.tsx       → /:param? (optional dynamic segment)
+ * - [...slug].tsx      → /*slug (catch-all)
+ * - [[...slug]].tsx    → /*slug? (optional catch-all)
+ * - posts.[id].tsx     → /posts/:id
  * - _layout.tsx        → Layout scoped to directory segment
  * - __root.tsx         → Root layout
  * - (group)/           → Route group (no URL segment)
- * - -excluded/         → Excluded from routing
+ * - _excluded/         → Excluded from routing (underscore prefix for folders)
  * - api/*.ts           → API routes (separate folder)
  * - ws/*.ts            → WebSocket routes (dedicated folder)
+ *
+ * Legacy support: $param syntax is still supported for backwards compatibility
  */
 
 import { readdirSync, statSync, existsSync, readFileSync } from 'fs';
@@ -47,6 +49,8 @@ interface RouteExports {
   hasMeta: boolean;
   hasMiddleware: boolean;
   hasWebSocket: boolean;
+  /** Whether route exports generateStaticParams for SSG */
+  hasGenerateStaticParams: boolean;
   methods?: HttpMethod[];
 }
 
@@ -71,6 +75,7 @@ function detectRouteExports(filePath: string, isApiRoute: boolean): RouteExports
       hasMeta: false,
       hasMiddleware: false,
       hasWebSocket: false,
+      hasGenerateStaticParams: false,
     };
 
     // Detect errorComponent export
@@ -148,6 +153,20 @@ function detectRouteExports(filePath: string, isApiRoute: boolean): RouteExports
       }
     }
 
+    // Detect generateStaticParams export (SSG)
+    const ssgPatterns = [
+      /export\s+(?:const|let|var)\s+generateStaticParams\b/,
+      /export\s+(?:async\s+)?function\s+generateStaticParams\s*\(/,
+      /export\s*\{\s*(?:[\w]+\s+as\s+)?generateStaticParams\s*[,}]/,
+    ];
+
+    for (const pattern of ssgPatterns) {
+      if (pattern.test(content)) {
+        result.hasGenerateStaticParams = true;
+        break;
+      }
+    }
+
     // For API routes, detect HTTP method exports
     if (isApiRoute) {
       const detectedMethods: HttpMethod[] = [];
@@ -184,6 +203,7 @@ function detectRouteExports(filePath: string, isApiRoute: boolean): RouteExports
       hasMeta: false,
       hasMiddleware: false,
       hasWebSocket: false,
+      hasGenerateStaticParams: false,
       methods: isApiRoute ? HTTP_METHODS : undefined,
     };
   }
@@ -324,8 +344,12 @@ export class RouteScanner {
       const relativePath = join(pathPrefix, entry.name);
 
       if (entry.isDirectory()) {
-        // Skip excluded directories (prefixed with -)
-        if (entry.name.startsWith('-')) {
+        // Skip excluded directories (prefixed with _ but not __ for root layout or _layout)
+        // Also support legacy - prefix
+        if (
+          (entry.name.startsWith('_') && entry.name !== '_layout' && !entry.name.startsWith('__')) ||
+          entry.name.startsWith('-')
+        ) {
           continue;
         }
 
@@ -408,7 +432,7 @@ export class RouteScanner {
       const relativePath = relative(this.routesDir, fullPath);
 
       if (entry.isDirectory()) {
-        if (entry.name.startsWith('-')) continue;
+        if (entry.name.startsWith('-') || entry.name.startsWith('_')) continue;
 
         const urlSegment = this.fileNameToUrlSegment(entry.name);
         this.scanApiDirectory(fullPath, `${urlPrefix}/${urlSegment}`, apiRoutes, wsRoutes);
@@ -452,7 +476,7 @@ export class RouteScanner {
       const relativePath = relative(this.routesDir, fullPath);
 
       if (entry.isDirectory()) {
-        if (entry.name.startsWith('-')) continue;
+        if (entry.name.startsWith('-') || entry.name.startsWith('_')) continue;
 
         const urlSegment = this.fileNameToUrlSegment(entry.name);
         this.scanWsDirectory(fullPath, `${urlPrefix}/${urlSegment}`, wsRoutes);
@@ -484,7 +508,8 @@ export class RouteScanner {
     if (baseName === 'index') {
       urlPath = urlPrefix;
     } else {
-      const segments = baseName.split('.');
+      // Preserve brackets when splitting
+      const segments = this.splitPreservingBrackets(baseName);
       const urlSegments: string[] = [];
       let paramIndex = urlPrefix.split('/').filter(Boolean).length;
 
@@ -507,20 +532,75 @@ export class RouteScanner {
   }
 
   /**
-   * Parse a single segment for params (supports optional syntax: $param? and $...rest?)
+   * Parse a single segment for params
+   *
+   * Supports Next.js style:
+   * - [param]     → :param (required)
+   * - [param]?    → :param? (optional - file-level only)
+   * - [...slug]   → *slug (catch-all)
+   * - [[...slug]] → *slug? (optional catch-all)
+   *
+   * Legacy TanStack style (still supported):
+   * - $param      → :param
+   * - $param?     → :param?
+   * - $...rest    → *rest
+   * - $...rest?   → *rest?
    */
   private parseSegment(segment: string, paramIndex: number): { urlSegment: string; params: RouteParam[] } {
     const params: RouteParam[] = [];
 
+    // Next.js style: [[...slug]] - optional catch-all
+    if (segment.startsWith('[[...') && segment.endsWith(']]')) {
+      const paramName = segment.slice(5, -2); // Extract 'slug' from '[[...slug]]'
+      params.push({
+        name: paramName,
+        index: paramIndex,
+        catchAll: true,
+        optional: true,
+      });
+      return { urlSegment: `*${paramName}?`, params };
+    }
+
+    // Next.js style: [...slug] - catch-all
+    if (segment.startsWith('[...') && segment.endsWith(']')) {
+      const paramName = segment.slice(4, -1); // Extract 'slug' from '[...slug]'
+      params.push({
+        name: paramName,
+        index: paramIndex,
+        catchAll: true,
+        optional: false,
+      });
+      return { urlSegment: `*${paramName}`, params };
+    }
+
+    // Next.js style: [param] or [param]? - dynamic segment
+    if (segment.startsWith('[') && (segment.endsWith(']') || segment.endsWith(']?'))) {
+      const isOptional = segment.endsWith(']?');
+      const paramName = isOptional
+        ? segment.slice(1, -2) // Extract 'param' from '[param]?'
+        : segment.slice(1, -1); // Extract 'param' from '[param]'
+
+      params.push({
+        name: paramName,
+        index: paramIndex,
+        catchAll: false,
+        optional: isOptional,
+      });
+
+      return {
+        urlSegment: `:${paramName}${isOptional ? '?' : ''}`,
+        params,
+      };
+    }
+
+    // Legacy TanStack style: $param, $param?, $...rest, $...rest?
     if (segment.startsWith('$')) {
-      // Dynamic segment
       let paramName = segment.slice(1);
       const isCatchAll = paramName.startsWith('...');
       if (isCatchAll) {
         paramName = paramName.slice(3);
       }
 
-      // Check for optional marker (?)
       const isOptional = paramName.endsWith('?');
       if (isOptional) {
         paramName = paramName.slice(0, -1);
@@ -533,7 +613,6 @@ export class RouteScanner {
         optional: isOptional,
       });
 
-      // URL segment format: :param or :param? for optional, *rest or *rest? for catch-all
       const urlSegment = isCatchAll
         ? `*${paramName}${isOptional ? '?' : ''}`
         : `:${paramName}${isOptional ? '?' : ''}`;
@@ -560,7 +639,8 @@ export class RouteScanner {
       isIndex = true;
     } else {
       // Parse the base name (may have dot-separated segments)
-      const segments = baseName.split('.');
+      // But preserve brackets: [param], [...slug], [[...slug]]
+      const segments = this.splitPreservingBrackets(baseName);
       const urlSegments: string[] = [];
 
       let paramIndex = pathPrefix.split('/').filter(Boolean).length;
@@ -597,6 +677,7 @@ export class RouteScanner {
       pendingComponentExport: exports.pendingComponentExport,
       hasMeta: exports.hasMeta || undefined,
       hasMiddleware: exports.hasMiddleware || undefined,
+      hasGenerateStaticParams: exports.hasGenerateStaticParams || undefined,
       priority,
     };
   }
@@ -615,7 +696,8 @@ export class RouteScanner {
       urlPath = urlPrefix;
       isIndex = true;
     } else {
-      const segments = baseName.split('.');
+      // Preserve brackets when splitting
+      const segments = this.splitPreservingBrackets(baseName);
       const urlSegments: string[] = [];
       let paramIndex = urlPrefix.split('/').filter(Boolean).length;
 
@@ -659,7 +741,25 @@ export class RouteScanner {
   }
 
   private fileNameToUrlSegment(name: string): string {
-    // Handle dynamic segments
+    // Next.js style: [[...slug]] - optional catch-all
+    if (name.startsWith('[[...') && name.endsWith(']]')) {
+      const paramName = name.slice(5, -2);
+      return `*${paramName}?`;
+    }
+
+    // Next.js style: [...slug] - catch-all
+    if (name.startsWith('[...') && name.endsWith(']')) {
+      const paramName = name.slice(4, -1);
+      return `*${paramName}`;
+    }
+
+    // Next.js style: [param] - dynamic segment
+    if (name.startsWith('[') && name.endsWith(']')) {
+      const paramName = name.slice(1, -1);
+      return `:${paramName}`;
+    }
+
+    // Legacy TanStack style: $param
     if (name.startsWith('$')) {
       const paramName = name.slice(1);
       if (paramName.startsWith('...')) {
@@ -667,7 +767,47 @@ export class RouteScanner {
       }
       return `:${paramName}`;
     }
+
     return name;
+  }
+
+  /**
+   * Split a filename by dots, but preserve bracketed segments
+   * e.g., "posts.[id]" -> ["posts", "[id]"]
+   * e.g., "[...slug]" -> ["[...slug]"]
+   * e.g., "[[...path]]" -> ["[[...path]]"]
+   */
+  private splitPreservingBrackets(name: string): string[] {
+    const segments: string[] = [];
+    let current = '';
+    let bracketDepth = 0;
+
+    for (let i = 0; i < name.length; i++) {
+      const char = name[i];
+
+      if (char === '[') {
+        bracketDepth++;
+        current += char;
+      } else if (char === ']') {
+        bracketDepth--;
+        current += char;
+      } else if (char === '.' && bracketDepth === 0) {
+        // Split on dot only when not inside brackets
+        if (current) {
+          segments.push(current);
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+
+    // Add the last segment
+    if (current) {
+      segments.push(current);
+    }
+
+    return segments;
   }
 
   private prefixToUrl(prefix: string): string {

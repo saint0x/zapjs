@@ -1,7 +1,12 @@
 /**
  * @zapjs/router
  *
- * File-based routing for ZapJS (TanStack style conventions)
+ * File-based routing for ZapJS (Next.js style conventions)
+ *
+ * File naming:
+ * - [param].tsx     → /:param (dynamic segment)
+ * - [...slug].tsx   → /*slug (catch-all)
+ * - [[...slug]].tsx → /*slug? (optional catch-all)
  */
 
 // Types
@@ -29,3 +34,22 @@ export { generateRouteTree, generateRustManifest } from './codegen.js';
 
 // Watcher
 export { RouteWatcher, watchRoutes, watchAndRegenerate } from './watch.js';
+
+// SSG (Static Site Generation)
+export {
+  buildSsg,
+  buildPrerenderedRoutes,
+  findSsgRoutes,
+  collectStaticParams,
+  buildPath,
+  getOutputPath,
+  writeSsgManifest,
+  readSsgManifest,
+  isStaticPath,
+  getStaticRoute,
+  type StaticParams,
+  type GenerateStaticParamsFn,
+  type PrerenderedRoute,
+  type SsgManifest,
+  type SsgOptions,
+} from './ssg.js';

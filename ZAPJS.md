@@ -2,11 +2,11 @@
 
 > Fullstack web framework: React frontend + Rust backend compiled into a single deployable binary.
 
-**Status:** Phase 8 & 10.5 Complete (Enhanced RPC, Production Hardening) | **Updated:** December 2024
+**Status:** Phase 11 Complete (Client Router + SSG) | **Updated:** December 2024
 
 ---
 
-## Completed (Phases 1-8 + Type Safety + Phase 10.1-10.5)
+## Completed (Phases 1-11)
 
 | Phase | Summary |
 |-------|---------|
@@ -15,15 +15,16 @@
 | 3. CLI | `zap new/dev/build/serve/codegen/routes` commands |
 | 4. Dev Server | Hot reload (Rust + TS), file watching, WebSocket HMR |
 | 5. Production | LTO builds, Docker, cross-compilation, graceful shutdown |
-| 6. App Router | TanStack-style file routing, API routes, route tree codegen |
+| 6. App Router | Next.js-style file routing `[param]`, API routes, route tree codegen |
 | 7. create-zap-app | `npx create-zap-app`, templates, package manager selection |
 | **8. Enhanced RPC** | MessagePack, connection pooling, streaming, WebSocket mode |
 | **Type Safety** | Full bidirectional Rust↔TypeScript type safety with union types |
 | **10.1 Security** | Security headers, rate limiting, strict CORS middleware |
 | **10.2 Observability** | Prometheus metrics, X-Request-ID correlation, structured logging |
-| **10.3 Error Handling** | React ErrorBoundary, useRouteError hook, TanStack-style errorComponent |
+| **10.3 Error Handling** | React ErrorBoundary, useRouteError hook, errorComponent |
 | **10.4 Caching** | ETag generation, Last-Modified, conditional requests (304) |
 | **10.5 Reliability** | IPC retry with exponential backoff, circuit breaker, Kubernetes health probes |
+| **11. Client Router** | useRouter, useParams, Link, SSG with generateStaticParams |
 
 **All packages complete:** `@zapjs/runtime`, `@zapjs/cli`, `@zapjs/dev-server`, `@zapjs/router`, `create-zap-app`, `zap-core`, `zap-server`, `zap-macros`, `zap-codegen`
 
@@ -109,23 +110,57 @@ zap codegen                 # Generate TS bindings
 npx create-zap-app my-app   # Standalone scaffolding
 ```
 
-### Route Conventions
+### Route Conventions (Next.js Style)
 | Pattern | URL |
 |---------|-----|
 | `index.tsx` | `/` |
-| `$param.tsx` | `/:param` |
-| `posts.$id.tsx` | `/posts/:id` |
-| `_layout.tsx` | Pathless layout |
+| `about.tsx` | `/about` |
+| `[id].tsx` | `/:id` (dynamic) |
+| `[...slug].tsx` | `/*slug` (catch-all) |
+| `[[...slug]].tsx` | `/*slug?` (optional catch-all) |
+| `posts.[id].tsx` | `/posts/:id` |
+| `_layout.tsx` | Scoped layout |
 | `__root.tsx` | Root layout |
-| `(group)/` | Route group |
+| `(group)/` | Route group (no URL) |
+| `_private/` | Excluded folder |
 | `api/*.ts` | API routes |
 
 ### API Route Example
 ```typescript
-// routes/api/users.$id.ts
+// routes/api/users.[id].ts
 export const GET = async ({ params }: { params: { id: string } }) => {
   return { id: params.id, name: `User ${params.id}` };
 };
+```
+
+### Client Router
+```typescript
+import { RouterProvider, useRouter, useParams, Link } from '@zapjs/runtime';
+
+// Navigation
+const router = useRouter();
+router.push('/posts/123');
+router.back();
+
+// Params
+const { id } = useParams<{ id: string }>();
+
+// Links (SPA navigation)
+<Link to="/posts/123">View Post</Link>
+<NavLink to="/dashboard" activeClassName="active">Dashboard</NavLink>
+```
+
+### SSG (Static Site Generation)
+```typescript
+// routes/posts/[id].tsx
+export async function generateStaticParams() {
+  const posts = await getPosts();
+  return posts.map(post => ({ id: post.id }));
+}
+
+export default function PostPage({ params }: { params: { id: string } }) {
+  // Pre-rendered at build time for each id
+}
 ```
 
 ### Architecture
@@ -331,11 +366,76 @@ circuit_breaker: {
 server.health_endpoints()  // Registers /health/live and /health/ready
 ```
 
+### Client Router (Phase 11)
+
+**RouterProvider** - Wrap your app:
+```typescript
+import { RouterProvider, Outlet } from '@zapjs/runtime';
+import { routeDefinitions } from './generated/routerConfig';
+
+function App() {
+  return (
+    <RouterProvider routes={routeDefinitions}>
+      <nav>...</nav>
+      <Outlet />
+    </RouterProvider>
+  );
+}
+```
+
+**Hooks** - Standard React patterns:
+```typescript
+import { useRouter, useParams, usePathname, useSearchParams } from '@zapjs/runtime';
+
+function MyComponent() {
+  const router = useRouter();
+  const { id } = useParams<{ id: string }>();
+  const pathname = usePathname();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Navigate programmatically
+  router.push('/posts/123');
+  router.replace('/login');
+  router.back();
+  router.prefetch('/dashboard');
+}
+```
+
+**Link & NavLink** - SPA navigation:
+```typescript
+import { Link, NavLink } from '@zapjs/runtime';
+
+<Link to="/posts/123">View Post</Link>
+<Link to="/posts/123" replace>Replace History</Link>
+<NavLink to="/dashboard" activeClassName="active">Dashboard</NavLink>
+```
+
+### SSG (Phase 11)
+
+**generateStaticParams** - Pre-render dynamic routes at build time:
+```typescript
+// routes/posts/[id].tsx
+export async function generateStaticParams() {
+  const posts = await fetchPosts();
+  return posts.map(post => ({ id: post.id }));
+}
+
+export default function PostPage({ params }: { params: { id: string } }) {
+  // This page will be pre-rendered for each id returned above
+}
+```
+
+**Build-time generation**:
+- Route scanner detects `generateStaticParams` exports
+- Build process calls each function to collect params
+- Static HTML generated at `dist/posts/[id]/index.html`
+- SSG manifest tracks all pre-rendered paths
+
 ### Error Handling (10.3)
 
-**TanStack-style errorComponent** - Export from route files:
+**errorComponent** - Export from route files:
 ```typescript
-// routes/users.$id.tsx
+// routes/users.[id].tsx
 export default function UserPage({ params }) {
   return <UserProfile userId={params.id} />;
 }
@@ -473,7 +573,9 @@ ZapJS is production-ready as a **type-safe Rust RPC backend** - comparable to:
 | Typed error handling | ✅ Complete |
 | HTTP server | ✅ Complete |
 | IPC to TypeScript | ✅ Complete |
-| File-based routing | ✅ Basic |
+| File-based routing | ✅ Complete (Next.js style `[param]`) |
+| **Client-side router** | ✅ Complete (useRouter, Link, etc.) |
+| **SSG (generateStaticParams)** | ✅ Complete |
 | Hot reload | ✅ Complete |
 | Production builds | ✅ Complete |
 | Security headers | ✅ Complete |
@@ -498,15 +600,17 @@ ZapJS is production-ready as a **type-safe Rust RPC backend** - comparable to:
 
 | Feature | Next.js | ZapJS |
 |---------|---------|-------|
-| SSR/SSG | Built-in streaming | Not implemented |
-| React integration | First-class | Manual |
+| SSR | Built-in streaming | Not implemented (SSG only) |
+| Client Router | Built-in | ✅ useRouter, Link, NavLink |
+| SSG | Built-in | ✅ generateStaticParams |
+| File routing | `[param]` convention | ✅ Same convention |
 | Image optimization | Built-in | None |
 | Middleware | Edge middleware | Security, rate limiting, CORS |
 | Data fetching | fetch() caching, ISR | Manual |
-| Layouts/templates | Nested layouts | Basic |
+| Layouts/templates | Nested layouts | Scoped layouts |
 | Metadata API | SEO, OpenGraph | None |
-| Deployment | Vercel, any Node host | Custom |
-| Error boundaries | error.tsx convention | TanStack-style errorComponent |
+| Deployment | Vercel, any Node host | Custom binary |
+| Error boundaries | error.tsx convention | errorComponent export |
 | Observability | Manual | Prometheus, structured logging |
 | WebSocket | Manual | Built-in with IPC bridge |
 | Streaming | Server Components | AsyncIterable handlers |

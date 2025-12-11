@@ -1,5 +1,10 @@
 /**
- * Route types for ZapJS file-based routing (TanStack style)
+ * Route types for ZapJS file-based routing (Next.js style conventions)
+ *
+ * File naming:
+ * - [param].tsx     → /:param (dynamic segment)
+ * - [...slug].tsx   → /*slug (catch-all)
+ * - [[...slug]].tsx → /*slug? (optional catch-all)
  */
 
 export type RouteType = 'page' | 'api' | 'layout' | 'root';
@@ -10,9 +15,9 @@ export interface RouteParam {
   name: string;
   /** Position in the URL path segments */
   index: number;
-  /** Whether this is a catch-all param (e.g., $...rest) */
+  /** Whether this is a catch-all param (e.g., [...slug] or [[...slug]]) */
   catchAll: boolean;
-  /** Whether this param is optional (e.g., $param? or $...rest?) */
+  /** Whether this param is optional (e.g., [[...slug]]) */
   optional: boolean;
 }
 
@@ -21,7 +26,7 @@ export interface ScannedRoute {
   filePath: string;
   /** Relative path from routes directory */
   relativePath: string;
-  /** Generated URL path (e.g., /posts/:postId) */
+  /** Generated URL path (e.g., /posts/:id) */
   urlPath: string;
   /** Route type */
   type: RouteType;
@@ -35,7 +40,7 @@ export interface ScannedRoute {
   group?: string;
   /** Whether this is an index route */
   isIndex: boolean;
-  /** Whether this route exports an errorComponent (TanStack style) */
+  /** Whether this route exports an errorComponent */
   hasErrorComponent?: boolean;
   /** Export name for the error component (defaults to 'errorComponent') */
   errorComponentExport?: string;
@@ -47,6 +52,8 @@ export interface ScannedRoute {
   hasMeta?: boolean;
   /** Whether this route exports middleware */
   hasMiddleware?: boolean;
+  /** Whether this route exports generateStaticParams for SSG pre-rendering */
+  hasGenerateStaticParams?: boolean;
   /** Route priority score (higher = more specific) */
   priority?: number;
 }

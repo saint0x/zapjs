@@ -101,6 +101,31 @@ export {
 // Re-export logger (Phase 10.2)
 export { Logger, logger, type LogContext, type LogLevel, type ChildLogger } from "./logger.js";
 
+// Re-export client router
+export {
+  // Provider
+  RouterProvider,
+  // Hooks
+  useRouter,
+  useParams,
+  usePathname,
+  useSearchParams,
+  useRouteMatch,
+  useIsPending,
+  // Components
+  Link,
+  NavLink,
+  Outlet,
+  Redirect,
+  // Types
+  type Router,
+  type RouteDefinition,
+  type RouteMatch,
+  type RouterState,
+  type NavigateOptions,
+  type LinkProps,
+} from "./router.js";
+
 /**
  * Zap - Ultra-fast HTTP server for Node.js and Bun
  *
