@@ -394,13 +394,16 @@ function generateManifest(tree: RouteTree): RouteManifest {
 
 function routeToVarName(route: ScannedRoute): string {
   // Convert path like /posts/:postId to PostsPostIdRoute
+  // Also handles [param] style (e.g., /blog/[slug] -> BlogSlugRoute)
   let name = route.urlPath
     .replace(/^\//, '')
     .replace(/\//g, '_')
     .replace(/:/g, '')
     .replace(/\*/g, '')
     .replace(/-/g, '_')
-    .replace(/\?/g, '');
+    .replace(/\?/g, '')
+    .replace(/\[/g, '')
+    .replace(/\]/g, '');
 
   if (!name) name = 'Index';
 
@@ -415,13 +418,16 @@ function routeToVarName(route: ScannedRoute): string {
 
 function routeToErrorVarName(route: ScannedRoute): string {
   // Convert path like /posts/:postId to PostsPostIdErrorComponent
+  // Also handles [param] style (e.g., /blog/[slug] -> BlogSlugErrorComponent)
   let name = route.urlPath
     .replace(/^\//, '')
     .replace(/\//g, '_')
     .replace(/:/g, '')
     .replace(/\*/g, '')
     .replace(/-/g, '_')
-    .replace(/\?/g, '');
+    .replace(/\?/g, '')
+    .replace(/\[/g, '')
+    .replace(/\]/g, '');
 
   if (!name) name = 'Index';
 
@@ -436,13 +442,16 @@ function routeToErrorVarName(route: ScannedRoute): string {
 
 function routeToPendingVarName(route: ScannedRoute): string {
   // Convert path like /posts/:postId to PostsPostIdPendingComponent
+  // Also handles [param] style (e.g., /blog/[slug] -> BlogSlugPendingComponent)
   let name = route.urlPath
     .replace(/^\//, '')
     .replace(/\//g, '_')
     .replace(/:/g, '')
     .replace(/\*/g, '')
     .replace(/-/g, '_')
-    .replace(/\?/g, '');
+    .replace(/\?/g, '')
+    .replace(/\[/g, '')
+    .replace(/\]/g, '');
 
   if (!name) name = 'Index';
 
@@ -456,13 +465,16 @@ function routeToPendingVarName(route: ScannedRoute): string {
 }
 
 function routeToMetaVarName(route: ScannedRoute): string {
+  // Also handles [param] style (e.g., /blog/[slug] -> BlogSlugMeta)
   let name = route.urlPath
     .replace(/^\//, '')
     .replace(/\//g, '_')
     .replace(/:/g, '')
     .replace(/\*/g, '')
     .replace(/-/g, '_')
-    .replace(/\?/g, '');
+    .replace(/\?/g, '')
+    .replace(/\[/g, '')
+    .replace(/\]/g, '');
 
   if (!name) name = 'Index';
 
@@ -475,13 +487,16 @@ function routeToMetaVarName(route: ScannedRoute): string {
 }
 
 function routeToMiddlewareVarName(route: ScannedRoute): string {
+  // Also handles [param] style (e.g., /blog/[slug] -> BlogSlugMiddleware)
   let name = route.urlPath
     .replace(/^\//, '')
     .replace(/\//g, '_')
     .replace(/:/g, '')
     .replace(/\*/g, '')
     .replace(/-/g, '_')
-    .replace(/\?/g, '');
+    .replace(/\?/g, '')
+    .replace(/\[/g, '')
+    .replace(/\]/g, '');
 
   if (!name) name = 'Index';
 
@@ -495,9 +510,12 @@ function routeToMiddlewareVarName(route: ScannedRoute): string {
 
 function layoutToVarName(layout: LayoutRoute): string {
   // Convert scope path to PascalCase layout name
+  // Also handles [param] style in layout paths
   let name = layout.scopePath
     .replace(/\//g, '_')
-    .replace(/-/g, '_');
+    .replace(/-/g, '_')
+    .replace(/\[/g, '')
+    .replace(/\]/g, '');
 
   if (!name) name = 'Root';
 
@@ -512,13 +530,16 @@ function layoutToVarName(layout: LayoutRoute): string {
 
 function urlPathToFunctionName(urlPath: string): string {
   // Convert path like /posts/:postId to postsPostIdPath
+  // Also handles [param] style (e.g., /blog/[slug] -> blogSlugPath)
   let name = urlPath
     .replace(/^\//, '')
     .replace(/\//g, '_')
     .replace(/:/g, '')
     .replace(/\*/g, '')
     .replace(/-/g, '_')
-    .replace(/\?/g, '');
+    .replace(/\?/g, '')
+    .replace(/\[/g, '')
+    .replace(/\]/g, '');
 
   if (!name) name = 'index';
 
