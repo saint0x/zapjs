@@ -1,9 +1,9 @@
 [workspace]
 members = [
-    "packages/core",
     "packages/server",
-    "packages/macros",
-    "packages/codegen",
+    "packages/server/internal/core",
+    "packages/server/internal/macros",
+    "packages/server/internal/codegen",
     "zaptest"
 ]
 resolver = "2"

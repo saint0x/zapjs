@@ -1,5 +1,3 @@
-# <img src="public/zapjs-logo-full.png" alt="ZapJS" width="200" />
-
 High-performance fullstack React framework with Rust-powered backend. File-based routing, automatic TypeScript bindings, and zero-config development.
 
 ## Architecture
