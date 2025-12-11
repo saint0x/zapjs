@@ -1,8 +1,13 @@
 <div align="center">
-  <img src="public/zapjs-logo-full.png" alt="ZapJS" width="600" />
+  <br />
+  <br />
+  <img src="public/zapjs-logo-full.png" alt="ZapJS" width="600" style="margin-left: 20px;" />
+  <br />
+  <br />
   
   <h3>High-performance fullstack React framework with Rust-powered backend</h3>
   <p>File-based routing, automatic TypeScript bindings, and zero-config development</p>
+  <br />
 </div>
 
 ## Architecture
