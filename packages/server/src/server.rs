@@ -10,7 +10,7 @@ use hyper::{body::Incoming, Request as HyperRequest, Response as HyperResponse};
 use hyper_util::rt::TokioIo;
 use serde::Serialize;
 use tokio::net::TcpListener;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use zap_core::{
     HttpParser, Method, MiddlewareChain, Request, Router,
@@ -23,6 +23,7 @@ use crate::proxy::ProxyHandler;
 use crate::reliability::{HealthChecker, HealthStatus};
 use crate::request::RequestData;
 use crate::response::{Json, ZapResponse};
+use crate::shutdown::{GracefulShutdown, ShutdownConfig};
 use crate::r#static::{handle_static_files, StaticHandler, StaticOptions};
 use crate::utils::convert_method;
 
@@ -354,42 +355,91 @@ impl Zap {
         })
     }
 
-    /// Start the server and listen for connections
-    pub async fn listen(self) -> Result<(), ZapError> {
+    /// Start the server and listen for connections with graceful shutdown support
+    ///
+    /// This method enables:
+    /// - SIGTERM/SIGINT signal handling
+    /// - Graceful connection draining
+    /// - Proper resource cleanup
+    ///
+    /// For production use, prefer this over `listen()`.
+    pub async fn listen_with_shutdown(self, shutdown_config: ShutdownConfig) -> Result<(), ZapError> {
         let addr = self.config.socket_addr();
         let socket_addr: SocketAddr = addr.parse().map_err(|e| {
             ZapError::http(format!("Invalid address '{}': {}", addr, e))
         })?;
 
         let listener = TcpListener::bind(socket_addr).await?;
-        
+
         info!("🚀 Zap server listening on http://{}", addr);
         info!("📊 Router contains {} routes", self.router.total_routes());
-        
+        info!("🛡️  Graceful shutdown enabled (drain timeout: {:?})", shutdown_config.drain_timeout);
+
         let server = Arc::new(self);
+        let shutdown = GracefulShutdown::new(shutdown_config);
 
         loop {
-            let (stream, remote_addr) = listener.accept().await?;
-            let server = server.clone();
-            
-            tokio::spawn(async move {
-                let io = TokioIo::new(stream);
-                
-                let service = service_fn(move |req| {
-                    let server = server.clone();
-                    async move {
-                        server.handle_request(req, remote_addr).await
-                    }
-                });
-
-                if let Err(err) = http1::Builder::new()
-                    .serve_connection(io, service)
-                    .await
-                {
-                    error!("Error serving connection: {:?}", err);
+            tokio::select! {
+                // Wait for shutdown signal
+                _ = shutdown.wait() => {
+                    info!("🛑 Shutdown signal received, stopping new connections");
+                    break;
                 }
-            });
+                // Accept new connections
+                result = listener.accept() => {
+                    match result {
+                        Ok((stream, remote_addr)) => {
+                            let server = server.clone();
+                            let shutdown = shutdown.clone();
+
+                            tokio::spawn(async move {
+                                // Track this connection
+                                let _guard = shutdown.connection_guard();
+
+                                let io = TokioIo::new(stream);
+
+                                let service = service_fn(move |req| {
+                                    let server = server.clone();
+                                    async move {
+                                        server.handle_request(req, remote_addr).await
+                                    }
+                                });
+
+                                if let Err(err) = http1::Builder::new()
+                                    .serve_connection(io, service)
+                                    .await
+                                {
+                                    debug!("Connection closed: {:?}", err);
+                                }
+                            });
+                        }
+                        Err(e) => {
+                            error!("Failed to accept connection: {}", e);
+                        }
+                    }
+                }
+            }
         }
+
+        // Drain in-flight connections
+        info!("⏳ Draining active connections...");
+        let drained = shutdown.drain_connections().await;
+
+        if drained {
+            info!("✅ Server shutdown complete");
+        } else {
+            warn!("⚠️  Server shutdown with {} active connection(s) remaining",
+                  shutdown.active_connection_count());
+        }
+
+        Ok(())
+    }
+
+    /// Start the server and listen for connections (without graceful shutdown)
+    ///
+    /// For production use, prefer `listen_with_shutdown()` which handles signals properly.
+    pub async fn listen(self) -> Result<(), ZapError> {
+        self.listen_with_shutdown(ShutdownConfig::production()).await
     }
 
     /// Handle an individual HTTP request

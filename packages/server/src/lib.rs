@@ -96,6 +96,7 @@ pub mod request;
 pub mod request_id;
 pub mod response;
 pub mod server;
+pub mod shutdown;
 pub mod r#static;
 pub mod utils;
 pub mod websocket;
@@ -110,6 +111,7 @@ pub use proxy::ProxyHandler;
 pub use request::RequestData;
 pub use response::{Json, ZapResponse};
 pub use server::Zap;
+pub use shutdown::{GracefulShutdown, ShutdownConfig, ConnectionGuard};
 pub use r#static::{ETagStrategy, StaticHandler, StaticOptions, handle_static_files_with_headers};
 pub use websocket::{WsConfig, WsHandler, handle_websocket_connection, is_websocket_upgrade};
 pub use reliability::{
