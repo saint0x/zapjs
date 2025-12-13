@@ -1,0 +1,18 @@
+{
+  "description": "Performance baselines for main branch",
+  "updated": "2025-01-15",
+  "router_static_lookup_ns": 9.0,
+  "router_dynamic_lookup_ns": 80.0,
+  "http_parser_simple_get_ns": 125.0,
+  "http_parser_with_headers_ns": 312.0,
+  "ipc_json_serialize_us": 2.5,
+  "ipc_msgpack_serialize_us": 1.8,
+  "rps_static_route": 180000,
+  "rps_dynamic_route": 45000,
+  "rps_mixed_workload": 100000,
+  "notes": [
+    "These are target values based on performance documentation",
+    "Actual values will be updated after initial benchmark run",
+    "Values represent typical performance on GitHub Actions runners"
+  ]
+}
