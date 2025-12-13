@@ -1,21 +1,13 @@
 /**
  * @zap-js/server
- * 
+ *
  * ZapJS server communication utilities
+ * Re-exports from @zap-js/client
  */
 
-// RPC client
-import rpc from './src/rpc.js';
-
-// IPC client
-import ipc from './src/ipc.js';
-
-// Types
-import * as types from './src/types.js';
-
-// Export everything
 export {
-  rpc,
-  ipc,
-  types
-};
+  IpcClient,
+  IpcServer,
+  ProcessManager,
+  rpcCall,
+} from '@zap-js/client';

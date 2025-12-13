@@ -1,6 +1,6 @@
 {
   "name": "@zap-js/server",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "High-performance fullstack React framework - Server package with Rust-powered backend",
   "homepage": "https://github.com/saint0x/zapjs",
   "repository": {
@@ -16,15 +16,10 @@
     ".": "./index.js"
   },
   "files": [
-    "index.js",
-    "src",
-    "internal",
-    "!internal/*/src/**/*.rs",
-    "!internal/*/Cargo.toml"
+    "index.js"
   ],
-  "scripts": {
-    "build": "echo 'No build needed for server package'",
-    "clean": "rm -rf dist"
+  "dependencies": {
+    "@zap-js/client": "^0.0.3"
   },
   "keywords": [
     "zap",
