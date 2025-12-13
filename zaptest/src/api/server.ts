@@ -12,9 +12,12 @@ import type {
   ListPostsResponse,
   ListUsersResponse,
   PostWithRelated,
+  SSGInfo,
   StatsResponse,
+  StreamingInfo,
   SubscribeResponse,
   User,
+  WebSocketInfo,
 } from './types';
 
 // Re-export types for consumers
@@ -60,6 +63,15 @@ export const server = {
     },
     async hello(): Promise<HelloResponse | ApiError> {
       return rpcCall<HelloResponse | ApiError>('hello', {});
+    },
+    async getStreamingInfo(): Promise<StreamingInfo | ApiError> {
+      return rpcCall<StreamingInfo | ApiError>('get_streaming_info', {});
+    },
+    async getWebsocketInfo(): Promise<WebSocketInfo | ApiError> {
+      return rpcCall<WebSocketInfo | ApiError>('get_websocket_info', {});
+    },
+    async getSsgInfo(): Promise<SSGInfo | ApiError> {
+      return rpcCall<SSGInfo | ApiError>('get_ssg_info', {});
     },
   },
 } as const;

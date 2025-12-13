@@ -150,3 +150,27 @@ export interface ApiError {
   code: string;
 }
 
+export interface StreamingInfo {
+  endpoint: string;
+  supportedFormats: string[];
+  maxChunkSize: number;
+  description: string;
+  exampleEvents: string[];
+}
+
+export interface WebSocketInfo {
+  endpoint: string;
+  protocol: string;
+  commands: Record<string, string>;
+  connectedClients: number;
+  description: string;
+}
+
+export interface SSGInfo {
+  staticRoutes: string[];
+  totalPages: number;
+  buildTime: string;
+  description: string;
+  generatedAt: string;
+}
+

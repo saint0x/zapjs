@@ -1,6 +1,11 @@
 import { existsSync, mkdirSync, readFileSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { cliLogger } from '../utils/logger.js';
+
+// ESM equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export interface RoutesOptions {
   routesDir?: string;
@@ -101,14 +106,13 @@ export async function routesCommand(options: RoutesOptions): Promise<void> {
     let router: any;
 
     try {
-      // Try internal path first
-      const internalPath = join(__dirname, '../../../router/src/index.js');
-      if (existsSync(internalPath)) {
-        router = await import(internalPath);
+      // Path from dist/cli/commands/routes.js to dist/router/index.js
+      const routerPath = join(__dirname, '../../router/index.js');
+
+      if (existsSync(routerPath)) {
+        router = await import(routerPath);
       } else {
-        // Try relative path within client package
-        const clientInternalPath = join(__dirname, '../../router/src/index.js');
-        router = await import(clientInternalPath);
+        throw new Error(`Router module not found at ${routerPath}`);
       }
     } catch (error) {
       cliLogger.failSpinner('loader', 'Route scanner not found');

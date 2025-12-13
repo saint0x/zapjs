@@ -11,9 +11,12 @@ import type {
   ListPostsResponse,
   ListUsersResponse,
   PostWithRelated,
+  SSGInfo,
   StatsResponse,
+  StreamingInfo,
   SubscribeResponse,
   User,
+  WebSocketInfo,
 } from './types';
 
 // Re-export types for consumers
@@ -84,6 +87,21 @@ export function echo_request(method: string, url: string, query: Record<string, 
  */
 export function hello(): Promise<HelloResponse | ApiError>;
 
+/**
+ * Get streaming endpoint info
+ */
+export function get_streaming_info(): Promise<StreamingInfo | ApiError>;
+
+/**
+ * Get WebSocket endpoint info
+ */
+export function get_websocket_info(): Promise<WebSocketInfo | ApiError>;
+
+/**
+ * Get SSG (Static Site Generation) info
+ */
+export function get_ssg_info(): Promise<SSGInfo | ApiError>;
+
 export interface ZapBackend {
   listUsers(limit: number, offset: number): Promise<ListUsersResponse | ApiError>;
   getUser(id: string): Promise<User | ApiError>;
@@ -98,6 +116,9 @@ export interface ZapBackend {
   subscribe(email: string): Promise<SubscribeResponse | ApiError>;
   echoRequest(method: string, url: string, query: Record<string, string>, headers: Record<string, string>, body: string | null): Promise<EchoResponse | ApiError>;
   hello(): Promise<HelloResponse | ApiError>;
+  getStreamingInfo(): Promise<StreamingInfo | ApiError>;
+  getWebsocketInfo(): Promise<WebSocketInfo | ApiError>;
+  getSsgInfo(): Promise<SSGInfo | ApiError>;
 }
 
 export declare const backend: ZapBackend;

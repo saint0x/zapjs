@@ -29,6 +29,14 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
   try {
     cliLogger.header('ZapJS Production Build');
 
+    // Step 1: Generate TypeScript bindings first (needed for type checking)
+    if (!options.skipCodegen) {
+      await runCodegen();
+    }
+
+    // Step 2: TypeScript type checking (optional but recommended)
+    await typeCheck();
+
     // Clean output directory
     if (existsSync(outputDir)) {
       cliLogger.spinner('clean', 'Cleaning output directory...');
@@ -36,28 +44,22 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
       cliLogger.succeedSpinner('clean', 'Output directory cleaned');
     }
 
-    // Create output structure
-    mkdirSync(outputDir, { recursive: true });
-    mkdirSync(join(outputDir, 'bin'), { recursive: true });
-
-    // Step 1: Build Rust binary
-    await buildRust(outputDir, options);
-
-    // Step 2: Build frontend (if not skipped)
+    // Step 3: Build frontend first (if not skipped)
+    // Vite will create the dist/ directory and populate it
     let staticDir: string | null = null;
     if (!options.skipFrontend) {
       staticDir = await buildFrontend(outputDir);
     }
 
-    // Step 3: Generate TypeScript bindings
-    if (!options.skipCodegen) {
-      await runCodegen();
-    }
+    // Step 4: Create bin directory and build Rust binary
+    // This happens AFTER frontend build so Vite doesn't overwrite it
+    mkdirSync(join(outputDir, 'bin'), { recursive: true });
+    await buildRust(outputDir, options);
 
-    // Step 4: Create production config
+    // Step 5: Create production config
     await createProductionConfig(outputDir, staticDir);
 
-    // Step 5: Create build manifest
+    // Step 6: Create build manifest
     const manifest = createBuildManifest(outputDir, staticDir);
     writeFileSync(
       join(outputDir, 'manifest.json'),
@@ -103,22 +105,64 @@ async function buildRust(
   try {
     execSync(`cargo ${args.join(' ')}`, {
       cwd: process.cwd(),
-      stdio: 'pipe',
+      stdio: 'inherit', // Show cargo output
     });
 
     const targetDir = options.target
       ? join('target', options.target, 'release')
       : join('target', 'release');
 
-    const srcBinary = join(process.cwd(), targetDir, 'zap');
-    const destBinary = join(outputDir, 'bin', 'zap');
-
-    if (existsSync(srcBinary)) {
-      copyFileSync(srcBinary, destBinary);
-      execSync(`chmod +x "${destBinary}"`, { stdio: 'pipe' });
-    } else {
-      throw new Error(`Binary not found at ${srcBinary}`);
+    // Get the default Rust target for this platform
+    let defaultTarget = '';
+    try {
+      defaultTarget = execSync('rustc -vV | grep host | cut -d: -f2', {
+        stdio: 'pipe',
+        encoding: 'utf-8'
+      }).trim();
+    } catch {
+      // Fallback targets based on platform
+      if (process.platform === 'darwin' && process.arch === 'arm64') {
+        defaultTarget = 'aarch64-apple-darwin';
+      } else if (process.platform === 'darwin') {
+        defaultTarget = 'x86_64-apple-darwin';
+      } else if (process.platform === 'linux') {
+        defaultTarget = 'x86_64-unknown-linux-gnu';
+      }
     }
+
+    const platformTargetDir = defaultTarget
+      ? join('target', defaultTarget, 'release')
+      : targetDir;
+
+    // Try multiple locations for the binary (workspace vs local)
+    const possibleBinaryPaths = [
+      // Workspace target with platform-specific dir
+      join(process.cwd(), '..', platformTargetDir, 'zap'),
+      join(process.cwd(), '..', '..', platformTargetDir, 'zap'),
+      // Workspace target standard
+      join(process.cwd(), '..', targetDir, 'zap'),
+      join(process.cwd(), '..', '..', targetDir, 'zap'),
+      // Local target with platform-specific dir
+      join(process.cwd(), platformTargetDir, 'zap'),
+      // Local target standard
+      join(process.cwd(), targetDir, 'zap'),
+    ];
+
+    let srcBinary: string | null = null;
+    for (const path of possibleBinaryPaths) {
+      if (existsSync(path)) {
+        srcBinary = path;
+        break;
+      }
+    }
+
+    if (!srcBinary) {
+      throw new Error(`Binary not found. Checked:\n${possibleBinaryPaths.join('\n')}`);
+    }
+
+    const destBinary = join(outputDir, 'bin', 'zap');
+    copyFileSync(srcBinary, destBinary);
+    execSync(`chmod +x "${destBinary}"`, { stdio: 'pipe' });
 
     cliLogger.succeedSpinner('rust', 'Rust backend built (release + LTO)');
   } catch (error) {
@@ -141,50 +185,101 @@ async function buildFrontend(
   cliLogger.spinner('vite', 'Building frontend (Vite)...');
 
   try {
-    execSync('npx vite build', {
+    // Build to a temporary directory to avoid conflicts
+    const tempDist = join(process.cwd(), '.dist-temp');
+
+    // Clean temp directory if it exists
+    if (existsSync(tempDist)) {
+      rmSync(tempDist, { recursive: true, force: true });
+    }
+
+    execSync(`npx vite build --outDir ${tempDist}`, {
       cwd: process.cwd(),
       stdio: 'pipe',
     });
 
-    const viteDist = join(process.cwd(), 'dist');
     const staticDir = join(outputDir, 'static');
 
-    if (existsSync(viteDist)) {
-      copyDirectory(viteDist, staticDir);
+    if (existsSync(tempDist)) {
+      copyDirectory(tempDist, staticDir);
+      // Clean up temp directory
+      rmSync(tempDist, { recursive: true, force: true });
       cliLogger.succeedSpinner('vite', 'Frontend built and bundled');
       return staticDir;
     } else {
       cliLogger.warn('Vite build completed but no output found');
       return null;
     }
-  } catch {
-    cliLogger.warn('Frontend build failed (continuing without frontend)');
+  } catch (error) {
+    cliLogger.failSpinner('vite', 'Frontend build failed');
+    cliLogger.warn('Continuing without frontend');
     return null;
   }
 }
 
-async function runCodegen(): Promise<void> {
-  cliLogger.spinner('codegen', 'Generating TypeScript bindings...');
+async function typeCheck(): Promise<void> {
+  // Check if tsconfig exists
+  const tsconfigPath = join(process.cwd(), 'tsconfig.json');
+  if (!existsSync(tsconfigPath)) {
+    return; // Skip if no tsconfig
+  }
 
-  const codegenPaths = [
-    join(process.cwd(), 'target/release/zap-codegen'),
-    'zap-codegen',
+  cliLogger.spinner('typecheck', 'Type checking TypeScript...');
+
+  try {
+    execSync('npx tsc --noEmit', {
+      cwd: process.cwd(),
+      stdio: 'pipe',
+    });
+    cliLogger.succeedSpinner('typecheck', 'TypeScript types OK');
+  } catch (error) {
+    cliLogger.warn('TypeScript type check failed (continuing build)');
+    // Don't fail the build, just warn
+  }
+}
+
+async function runCodegen(): Promise<void> {
+  const projectDir = process.cwd();
+
+  // Find codegen binary using same logic as codegen command
+  const possiblePaths = [
+    join(projectDir, 'bin', 'zap-codegen'),
+    join(projectDir, '../../target/release/zap-codegen'),
+    join(projectDir, '../../target/aarch64-apple-darwin/release/zap-codegen'),
+    join(projectDir, '../../target/x86_64-unknown-linux-gnu/release/zap-codegen'),
+    join(projectDir, 'target/release/zap-codegen'),
   ];
 
-  for (const codegenPath of codegenPaths) {
-    try {
-      execSync(`${codegenPath} --output ./src/api`, {
-        cwd: process.cwd(),
-        stdio: 'pipe',
-      });
-      cliLogger.succeedSpinner('codegen', 'TypeScript bindings generated');
-      return;
-    } catch {
-      continue;
+  let codegenBinary: string | null = null;
+  for (const path of possiblePaths) {
+    if (existsSync(path)) {
+      codegenBinary = path;
+      break;
     }
   }
 
-  cliLogger.info('Codegen skipped (binary not found)');
+  // Try global zap-codegen as fallback
+  if (!codegenBinary) {
+    try {
+      execSync('which zap-codegen', { stdio: 'pipe' });
+      codegenBinary = 'zap-codegen';
+    } catch {
+      cliLogger.info('Codegen skipped (binary not found)');
+      return;
+    }
+  }
+
+  cliLogger.spinner('codegen', 'Generating TypeScript bindings...');
+
+  try {
+    execSync(`"${codegenBinary}" --output-dir ./src/api`, {
+      cwd: process.cwd(),
+      stdio: 'pipe',
+    });
+    cliLogger.succeedSpinner('codegen', 'TypeScript bindings generated');
+  } catch (error) {
+    cliLogger.warn('Codegen failed (continuing build)');
+  }
 }
 
 async function createProductionConfig(

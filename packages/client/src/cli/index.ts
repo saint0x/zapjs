@@ -69,6 +69,7 @@ program
   .option('-d, --routes-dir <dir>', 'Routes directory path')
   .option('-o, --output <dir>', 'Output directory for generated files')
   .option('--json', 'Output routes as JSON')
+  .option('--verbose', 'Show full handler code')
   .action((options) => routesCommand(options));
 
 // Handle unknown commands
