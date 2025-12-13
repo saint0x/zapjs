@@ -1,12 +1,11 @@
 import { ChildProcess, spawn } from 'child_process';
-import chalk from 'chalk';
-import ora, { Ora } from 'ora';
 import { existsSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import { join, resolve } from 'path';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import { findAvailablePort } from '../utils/port-finder.js';
 import { IpcServer, ProcessManager, ZapConfig, RouteConfig } from '../../runtime/index.js';
+import { cliLogger } from '../utils/logger.js';
 
 export interface ServeOptions {
   port?: string;
@@ -67,10 +66,8 @@ async function ensureTsxRegistered(): Promise<void> {
  * 4. Coordinates both processes for graceful shutdown
  */
 export async function serveCommand(options: ServeOptions): Promise<void> {
-  const spinner = ora();
-
   try {
-    console.log(chalk.cyan('\n⚡ Zap Production Server\n'));
+    cliLogger.header('ZapJS Production Server');
 
     // Determine working directory (dist or current)
     const distDir = resolve('./dist');
@@ -93,8 +90,8 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
     }
 
     if (!existsSync(binPath)) {
-      console.error(chalk.red('\nError: No production binary found.'));
-      console.error(chalk.gray('Run `zap build` first to create a production build.\n'));
+      cliLogger.error('No production binary found');
+      cliLogger.info('Run `zap build` first to create a production build');
       process.exit(1);
     }
 
@@ -104,18 +101,18 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
     if (existsSync(configPath)) {
       try {
         prodConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
-        spinner.succeed(`Loaded config from ${configPath}`);
+        cliLogger.success(`Loaded config from ${configPath}`);
       } catch {
-        spinner.warn('Failed to parse config.json, using defaults');
+        cliLogger.warn('Failed to parse config.json, using defaults');
       }
     }
 
-    await runProductionServer(binPath, options, spinner, workDir, prodConfig);
+    await runProductionServer(binPath, options, workDir, prodConfig);
 
   } catch (error) {
-    spinner.fail('Failed to start server');
+    cliLogger.error('Failed to start server');
     if (error instanceof Error) {
-      console.error(chalk.red(`\nError: ${error.message}\n`));
+      cliLogger.error('Error details', error.message);
     }
     process.exit(1);
   }
@@ -124,7 +121,6 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
 async function runProductionServer(
   binPath: string,
   options: ServeOptions,
-  spinner: Ora,
   workDir: string,
   prodConfig?: ProductionConfig | null
 ): Promise<void> {
@@ -133,26 +129,26 @@ async function runProductionServer(
   const logLevel = options.logLevel || prodConfig?.logging?.level || 'info';
 
   // Find available port
-  spinner.start(`Checking port ${port}...`);
+  cliLogger.spinner('port', `Checking port ${port}...`);
   const availablePort = await findAvailablePort(port);
 
   if (availablePort !== port) {
-    spinner.warn(`Port ${port} in use, using ${availablePort}`);
+    cliLogger.warn(`Port ${port} in use, using ${availablePort}`);
   } else {
-    spinner.succeed(`Port ${availablePort} available`);
+    cliLogger.succeedSpinner('port', `Port ${availablePort} available`);
   }
 
   // Generate unique socket path
   const socketPath = join(tmpdir(), `zap-prod-${Date.now()}-${Math.random().toString(36).substring(7)}.sock`);
 
   // Start IPC server for TypeScript handlers
-  spinner.start('Starting IPC server...');
+  cliLogger.spinner('ipc', 'Starting IPC server...');
   const ipcServer = new IpcServer(socketPath);
   await ipcServer.start();
-  spinner.succeed('IPC server started');
+  cliLogger.succeedSpinner('ipc', 'IPC server started');
 
   // Load and register route handlers
-  const routes = await loadRouteHandlers(ipcServer, workDir, spinner);
+  const routes = await loadRouteHandlers(ipcServer, workDir);
 
   // Build Rust server configuration
   const zapConfig: ZapConfig = {
@@ -186,7 +182,7 @@ async function runProductionServer(
   writeFileSync(tempConfigPath, JSON.stringify(zapConfig, null, 2));
 
   // Start Rust server
-  spinner.start('Starting Rust HTTP server...');
+  cliLogger.spinner('rust', 'Starting Rust HTTP server...');
 
   const rustProcess: ChildProcess = spawn(binPath, [
     '--config', tempConfigPath,
@@ -210,11 +206,11 @@ async function runProductionServer(
     const output = data.toString();
     if (!started && (output.includes('listening') || output.includes('Server'))) {
       started = true;
-      spinner.succeed('Server started');
+      cliLogger.succeedSpinner('rust', 'Server started');
       printServerInfo(host, availablePort, workDir, prodConfig, routes.length);
     }
     if (started) {
-      process.stdout.write(chalk.gray(output));
+      process.stdout.write(output);
     }
   });
 
@@ -223,24 +219,24 @@ async function runProductionServer(
     if (!started) {
       // Don't fail immediately on stderr - Rust logs info to stderr sometimes
       if (output.includes('error') || output.includes('Error')) {
-        spinner.fail('Server failed to start');
-        console.error(chalk.red(output));
+        cliLogger.failSpinner('rust', 'Server failed to start');
+        cliLogger.error(output);
         cleanup(ipcServer, tempConfigPath);
         process.exit(1);
       }
     }
-    process.stderr.write(chalk.yellow(output));
+    process.stderr.write(output);
   });
 
   rustProcess.on('error', (err: Error) => {
-    spinner.fail(`Failed to start: ${err.message}`);
+    cliLogger.failSpinner('rust', `Failed to start: ${err.message}`);
     cleanup(ipcServer, tempConfigPath);
     process.exit(1);
   });
 
   rustProcess.on('exit', (code: number | null) => {
     if (code !== 0 && code !== null) {
-      console.error(chalk.red(`\nServer exited with code ${code}\n`));
+      cliLogger.error(`Server exited with code ${code}`);
       cleanup(ipcServer, tempConfigPath);
       process.exit(code);
     }
@@ -250,14 +246,14 @@ async function runProductionServer(
   setTimeout(() => {
     if (!started) {
       started = true;
-      spinner.succeed('Server started');
+      cliLogger.succeedSpinner('rust', 'Server started');
       printServerInfo(host, availablePort, workDir, prodConfig, routes.length);
     }
   }, 3000);
 
   // Graceful shutdown
   const shutdown = async () => {
-    console.log(chalk.yellow('\n\nShutting down...'));
+    cliLogger.warn('Shutting down...');
 
     // Kill Rust process
     if (!rustProcess.killed) {
@@ -288,8 +284,7 @@ async function runProductionServer(
  */
 async function loadRouteHandlers(
   ipcServer: IpcServer,
-  workDir: string,
-  spinner: Ora
+  workDir: string
 ): Promise<RouteConfig[]> {
   const routes: RouteConfig[] = [];
 
@@ -308,7 +303,7 @@ async function loadRouteHandlers(
   }
 
   if (!manifestPath) {
-    spinner.info('No route manifest found - API routes will not be available');
+    cliLogger.info('No route manifest found - API routes will not be available');
     return routes;
   }
 
@@ -317,14 +312,14 @@ async function loadRouteHandlers(
     const manifest: RouteManifest = JSON.parse(manifestContent);
 
     if (!manifest.apiRoutes || manifest.apiRoutes.length === 0) {
-      spinner.info('No API routes in manifest');
+      cliLogger.info('No API routes in manifest');
       return routes;
     }
 
     // Register tsx for TypeScript imports
     await ensureTsxRegistered();
 
-    spinner.start(`Loading ${manifest.apiRoutes.length} API route handlers...`);
+    cliLogger.spinner('routes', `Loading ${manifest.apiRoutes.length} API route handlers...`);
 
     for (const apiRoute of manifest.apiRoutes) {
       try {
@@ -343,7 +338,7 @@ async function loadRouteHandlers(
         }
 
         if (!routeFilePath) {
-          console.warn(`[routes] Route file not found: ${apiRoute.relativePath}`);
+          cliLogger.warn(`[routes] Route file not found: ${apiRoute.relativePath}`);
           continue;
         }
 
@@ -365,7 +360,7 @@ async function loadRouteHandlers(
                 return formatHandlerResponse(result);
               } catch (err) {
                 const message = err instanceof Error ? err.message : String(err);
-                console.error(`[handler] ERROR in ${method} ${apiRoute.urlPath}: ${message}`);
+                cliLogger.error(`[handler] ERROR in ${method} ${apiRoute.urlPath}:`, message);
                 return {
                   status: 500,
                   headers: { 'content-type': 'application/json' },
@@ -384,14 +379,14 @@ async function loadRouteHandlers(
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.warn(`[routes] Failed to load ${apiRoute.relativePath}: ${message}`);
+        cliLogger.warn(`[routes] Failed to load ${apiRoute.relativePath}: ${message}`);
       }
     }
 
-    spinner.succeed(`Loaded ${routes.length} API route handlers`);
+    cliLogger.succeedSpinner('routes', `Loaded ${routes.length} API route handlers`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    spinner.warn(`Failed to load route manifest: ${message}`);
+    cliLogger.warn(`Failed to load route manifest: ${message}`);
   }
 
   return routes;
@@ -466,22 +461,28 @@ function printServerInfo(
 ): void {
   const displayHost = host === '0.0.0.0' ? 'localhost' : host;
 
-  console.log(chalk.green('\n✓ Production server running\n'));
-  console.log(chalk.white('  Endpoints:'));
-  console.log(chalk.cyan(`    ➜ http://${displayHost}:${port}`));
+  cliLogger.newline();
+  cliLogger.success('Production server running');
+  cliLogger.newline();
+  cliLogger.info('Endpoints:');
+  cliLogger.listItem(`http://${displayHost}:${port}`, '➜');
 
   if (host === '0.0.0.0') {
-    console.log(chalk.gray(`    ➜ http://0.0.0.0:${port} (all interfaces)`));
+    cliLogger.listItem(`http://0.0.0.0:${port} (all interfaces)`, '➜');
   }
 
   if (routeCount !== undefined && routeCount > 0) {
-    console.log(chalk.gray(`\n  API routes: ${routeCount} handlers registered`));
+    cliLogger.newline();
+    cliLogger.keyValue('API routes', `${routeCount} handlers registered`);
   }
 
   if (config?.static) {
-    console.log(chalk.gray(`  Static files: ${config.static.directory}`));
+    cliLogger.keyValue('Static files', config.static.directory);
   }
 
-  console.log(chalk.gray(`\n  Working dir: ${workDir}`));
-  console.log(chalk.gray('\n  Press Ctrl+C to stop\n'));
+  cliLogger.newline();
+  cliLogger.keyValue('Working dir', workDir);
+  cliLogger.newline();
+  cliLogger.info('Press Ctrl+C to stop');
+  cliLogger.newline();
 }

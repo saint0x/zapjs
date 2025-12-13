@@ -1,26 +1,26 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import chalk from 'chalk';
 import { newCommand } from './commands/new.js';
 import { devCommand } from './commands/dev.js';
 import { buildCommand } from './commands/build.js';
 import { serveCommand } from './commands/serve.js';
 import { codegenCommand } from './commands/codegen.js';
 import { routesCommand } from './commands/routes.js';
+import { cliLogger } from './utils/logger.js';
 
 const program = new Command();
 
 program
   .name('zap')
-  .description('ZapRS - Fullstack Rust + React Framework')
+  .description('ZapJS - Fullstack Rust + React Framework')
   .version('0.1.0', '-v, --version')
   .helpOption('-h, --help');
 
 // Register commands
 program
   .command('new <name>')
-  .description('Create a new ZapRS project')
+  .description('Create a new ZapJS project')
   .option('-t, --template <template>', 'Template to use (basic|fullstack)', 'basic')
   .option('--no-install', 'Skip npm install')
   .option('--no-git', 'Skip git initialization')
@@ -73,11 +73,8 @@ program
 
 // Handle unknown commands
 program.on('command:*', () => {
-  console.error(
-    chalk.red(
-      `\nError: Unknown command "${program.args[0]}".\n`
-    )
-  );
+  cliLogger.error(`Unknown command "${program.args[0]}"`);
+  cliLogger.newline();
   program.outputHelp();
   process.exit(1);
 });

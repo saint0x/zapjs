@@ -2,8 +2,6 @@ import { EventEmitter } from 'events';
 import path from 'path';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
-import chalk from 'chalk';
-import ora, { Ora } from 'ora';
 import { FileWatcher, WatchEvent } from './watcher.js';
 import { RustBuilder, BuildResult } from './rust-builder.js';
 import { ViteProxy } from './vite-proxy.js';
@@ -11,6 +9,7 @@ import { CodegenRunner } from './codegen-runner.js';
 import { HotReloadServer } from './hot-reload.js';
 import { RouteScannerRunner } from './route-scanner.js';
 import { ProcessManager, IpcServer, ZapConfig, RouteConfig } from '../runtime/index.js';
+import { cliLogger } from '../cli/utils/logger.js';
 
 // Register tsx loader for TypeScript imports
 // This must be called before any dynamic imports of .ts files
@@ -101,9 +100,6 @@ export class DevServer extends EventEmitter {
   private currentRouteTree: RouteTree | null = null;
   private registeredHandlers: Map<string, string> = new Map(); // handlerId -> filePath
 
-  // UI
-  private spinner: Ora;
-
   // Timing
   private startTime: number = 0;
 
@@ -131,8 +127,6 @@ export class DevServer extends EventEmitter {
       viteReady: false,
       lastError: null,
     };
-
-    this.spinner = ora();
 
     // Initialize components
     this.watcher = new FileWatcher({
@@ -245,7 +239,7 @@ export class DevServer extends EventEmitter {
    */
   async start(): Promise<void> {
     this.startTime = Date.now();
-    console.log(chalk.cyan('\n⚡ ZapRS Dev Server\n'));
+    cliLogger.header('ZapJS Dev Server');
 
     try {
       // Phase 1: Initial Rust build
@@ -295,7 +289,8 @@ export class DevServer extends EventEmitter {
   async stop(): Promise<void> {
     if (this.state.phase === 'stopped') return;
     this.state.phase = 'stopped';
-    console.log(chalk.yellow('\nShutting down...'));
+    cliLogger.newline();
+    cliLogger.warn('Shutting down...');
 
     // Kill Rust server first (most important)
     if (this.processManager) {
@@ -320,7 +315,8 @@ export class DevServer extends EventEmitter {
       // Ignore errors during cleanup
     }
 
-    console.log(chalk.green('Goodbye!\n'));
+    cliLogger.success('Goodbye!');
+    cliLogger.newline();
     process.exit(0);
   }
 
@@ -328,23 +324,23 @@ export class DevServer extends EventEmitter {
    * Build Rust backend
    */
   private async buildRust(): Promise<void> {
-    this.spinner.start('Building Rust backend...');
+    cliLogger.spinner('rust-build', 'Building Rust backend...');
 
     const result = await this.rustBuilder.build();
 
     if (result.success) {
       const duration = (result.duration / 1000).toFixed(2);
-      this.spinner.succeed(`Rust build complete ${chalk.gray(`(${duration}s)`)}`);
+      cliLogger.succeedSpinner('rust-build', `Rust build complete (${duration}s)`);
       this.state.rustReady = true;
 
       if (result.warnings.length > 0) {
-        console.log(chalk.yellow(`  ${result.warnings.length} warnings`));
+        cliLogger.warn(`${result.warnings.length} warnings`);
       }
     } else {
-      this.spinner.fail('Rust build failed');
+      cliLogger.failSpinner('rust-build', 'Rust build failed');
 
       for (const error of result.errors) {
-        console.log(chalk.red(error));
+        cliLogger.error(error);
       }
 
       throw new Error('Rust build failed');
@@ -355,14 +351,14 @@ export class DevServer extends EventEmitter {
    * Run codegen to generate TypeScript bindings
    */
   private async runCodegen(): Promise<void> {
-    this.spinner.start('Generating TypeScript bindings...');
+    cliLogger.spinner('codegen', 'Generating TypeScript bindings...');
 
     const success = await this.codegenRunner.run();
 
     if (success) {
-      this.spinner.succeed('TypeScript bindings generated');
+      cliLogger.succeedSpinner('codegen', 'TypeScript bindings generated');
     } else {
-      this.spinner.warn('Codegen skipped (binary not found)');
+      cliLogger.warn('Codegen skipped (binary not found)');
     }
   }
 
@@ -375,15 +371,15 @@ export class DevServer extends EventEmitter {
       return null;
     }
 
-    this.spinner.start('Scanning routes...');
+    cliLogger.spinner('routes', 'Scanning routes...');
 
     const tree = await this.routeScanner.scan() as RouteTree | null;
 
     if (tree) {
-      this.spinner.succeed(`Found ${tree.routes.length} pages, ${tree.apiRoutes.length} API routes`);
+      cliLogger.succeedSpinner('routes', `Found ${tree.routes.length} pages, ${tree.apiRoutes.length} API routes`);
       return tree;
     } else {
-      this.spinner.warn('Route scanning skipped');
+      cliLogger.warn('Route scanning skipped');
       return null;
     }
   }
@@ -392,7 +388,7 @@ export class DevServer extends EventEmitter {
    * Start the Rust HTTP server with IPC for TypeScript handlers
    */
   private async startRustServer(routeTree: RouteTree | null): Promise<void> {
-    this.spinner.start('Starting Rust HTTP server...');
+    cliLogger.spinner('rust-server', 'Starting Rust HTTP server...');
 
     try {
       // Generate unique socket path for this dev session
@@ -418,9 +414,9 @@ export class DevServer extends EventEmitter {
       await this.processManager.start(config, this.config.logLevel || 'info');
 
       this.state.rustReady = true;
-      this.spinner.succeed(`Rust server ready on port ${this.config.rustPort}`);
+      cliLogger.succeedSpinner('rust-server', `Rust server ready on port ${this.config.rustPort}`);
     } catch (err) {
-      this.spinner.fail('Failed to start Rust server');
+      cliLogger.failSpinner('rust-server', 'Failed to start Rust server');
       const message = err instanceof Error ? err.message : String(err);
       this.log('error', `Rust server error: ${message}`);
       throw err;
@@ -619,13 +615,13 @@ export class DevServer extends EventEmitter {
    * Start the Vite dev server
    */
   private async startViteServer(): Promise<void> {
-    this.spinner.start('Starting Vite dev server...');
+    cliLogger.spinner('vite', 'Starting Vite dev server...');
 
     try {
       await this.viteProxy.start();
-      this.spinner.succeed(`Vite ready on port ${this.viteProxy.getPort()}`);
+      cliLogger.succeedSpinner('vite', `Vite ready on port ${this.viteProxy.getPort()}`);
     } catch (err) {
-      this.spinner.warn('Vite not available (frontend only)');
+      cliLogger.warn('Vite not available (frontend only)');
       this.log('debug', `Vite error: ${err}`);
     }
   }
@@ -643,15 +639,16 @@ export class DevServer extends EventEmitter {
    */
   private async handleRustChange(event: WatchEvent): Promise<void> {
     const relativePath = path.relative(this.config.projectDir, event.path);
-    console.log(chalk.blue(`\n[${event.type}] ${relativePath}`));
+    cliLogger.newline();
+    cliLogger.info(`[${event.type}] ${relativePath}`);
 
-    this.spinner.start('Rebuilding Rust...');
+    cliLogger.spinner('rust-rebuild', 'Rebuilding Rust...');
 
     const result = await this.rustBuilder.build();
 
     if (result.success) {
       const duration = (result.duration / 1000).toFixed(2);
-      this.spinner.succeed(`Rust rebuild complete ${chalk.gray(`(${duration}s)`)}`);
+      cliLogger.succeedSpinner('rust-rebuild', `Rust rebuild complete (${duration}s)`);
 
       // Regenerate bindings
       await this.codegenRunner.run();
@@ -660,10 +657,10 @@ export class DevServer extends EventEmitter {
       this.hotReloadServer.reload('rust', [relativePath]);
       this.state.phase = 'ready';
     } else {
-      this.spinner.fail('Rust build failed');
+      cliLogger.failSpinner('rust-rebuild', 'Rust build failed');
 
       for (const error of result.errors.slice(0, 3)) {
-        console.log(chalk.red(error));
+        cliLogger.error(error);
       }
 
       // Notify clients of error
@@ -689,14 +686,15 @@ export class DevServer extends EventEmitter {
    */
   private async handleConfigChange(event: WatchEvent): Promise<void> {
     const relativePath = path.relative(this.config.projectDir, event.path);
-    console.log(chalk.yellow(`\n[config] ${relativePath}`));
+    cliLogger.newline();
+    cliLogger.warn(`[config] ${relativePath}`);
 
     // For significant config changes, restart might be needed
     if (relativePath.includes('Cargo.toml')) {
-      console.log(chalk.yellow('Cargo.toml changed - rebuilding...'));
+      cliLogger.warn('Cargo.toml changed - rebuilding...');
       await this.handleRustChange(event);
     } else if (relativePath.includes('vite.config')) {
-      console.log(chalk.yellow('Vite config changed - restarting Vite...'));
+      cliLogger.warn('Vite config changed - restarting Vite...');
       await this.viteProxy.restart();
     }
   }
@@ -707,22 +705,27 @@ export class DevServer extends EventEmitter {
   private printReadyMessage(): void {
     const elapsed = ((Date.now() - this.startTime) / 1000).toFixed(2);
 
-    console.log(chalk.green(`\n✓ Dev server ready in ${elapsed}s\n`));
-    console.log(chalk.cyan('  Servers:'));
-    console.log(chalk.white(`    ➜ API:        http://127.0.0.1:${this.config.rustPort}`));
+    cliLogger.newline();
+    cliLogger.success(`Dev server ready in ${elapsed}s`);
+    cliLogger.newline();
+    cliLogger.info('Servers:');
+    cliLogger.listItem(`API:        http://127.0.0.1:${this.config.rustPort}`, '➜');
 
     if (this.viteProxy.getPort()) {
-      console.log(chalk.white(`    ➜ Frontend:   http://127.0.0.1:${this.viteProxy.getPort()}`));
+      cliLogger.listItem(`Frontend:   http://127.0.0.1:${this.viteProxy.getPort()}`, '➜');
     }
 
-    console.log(chalk.white(`    ➜ Hot Reload: ws://127.0.0.1:${this.config.hotReloadPort}`));
-    console.log(chalk.gray('\n  Press Ctrl+C to stop\n'));
+    cliLogger.listItem(`Hot Reload: ws://127.0.0.1:${this.config.hotReloadPort}`, '➜');
+    cliLogger.newline();
+    cliLogger.info('Press Ctrl+C to stop');
+    cliLogger.newline();
 
     // Show keyboard shortcuts
-    console.log(chalk.gray('  Shortcuts:'));
-    console.log(chalk.gray('    r - Rebuild Rust'));
-    console.log(chalk.gray('    c - Regenerate codegen'));
-    console.log(chalk.gray('    q - Quit\n'));
+    cliLogger.info('Shortcuts:');
+    console.log('    r - Rebuild Rust');
+    console.log('    c - Regenerate codegen');
+    console.log('    q - Quit');
+    cliLogger.newline();
 
     // Setup keyboard input
     this.setupKeyboardInput();
@@ -746,13 +749,15 @@ export class DevServer extends EventEmitter {
 
         // 'r' - rebuild
         if (key === 'r') {
-          console.log(chalk.blue('\nManual rebuild triggered...'));
+          cliLogger.newline();
+          cliLogger.info('Manual rebuild triggered...');
           await this.rustBuilder.build();
         }
 
         // 'c' - codegen
         if (key === 'c') {
-          console.log(chalk.blue('\nRegenerating bindings...'));
+          cliLogger.newline();
+          cliLogger.info('Regenerating bindings...');
           await this.codegenRunner.run();
         }
 
@@ -790,10 +795,10 @@ export class DevServer extends EventEmitter {
 
     if (msgLevel >= configLevel) {
       const prefix = {
-        debug: chalk.gray('[debug]'),
-        info: chalk.blue('[info]'),
-        warn: chalk.yellow('[warn]'),
-        error: chalk.red('[error]'),
+        debug: '[debug]',
+        info: '[info]',
+        warn: '[warn]',
+        error: '[error]',
       }[level];
 
       console.log(`${prefix} ${message}`);

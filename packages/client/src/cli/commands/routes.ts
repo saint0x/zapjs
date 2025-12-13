@@ -1,7 +1,6 @@
-import chalk from 'chalk';
-import ora from 'ora';
 import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { join, resolve } from 'path';
+import { cliLogger } from '../utils/logger.js';
 
 export interface RoutesOptions {
   routesDir?: string;
@@ -69,34 +68,35 @@ function extractHandlerCode(filePath: string, method?: string): string | null {
  * Enhanced route scanner that shows handler logic
  */
 export async function routesCommand(options: RoutesOptions): Promise<void> {
-  const spinner = ora();
-
   try {
     const projectDir = process.cwd();
     const routesDir = resolve(options.routesDir || join(projectDir, 'routes'));
     const outputDir = resolve(options.output || join(projectDir, 'src', 'generated'));
     const showCode = options.showCode !== false; // Default to true
 
-    console.log(chalk.cyan('\n⚡ ZapJS Route Scanner\n'));
+    cliLogger.header('ZapJS Route Scanner');
 
     // Check if routes directory exists
     if (!existsSync(routesDir)) {
-      console.log(chalk.yellow('No routes directory found.'));
-      console.log(chalk.gray(`Expected: ${routesDir}`));
-      console.log(chalk.gray('\nCreate a routes/ directory with your route files to get started.'));
-      console.log(chalk.gray('\nNext.js-style conventions:'));
-      console.log(chalk.gray('  routes/index.tsx          → /'));
-      console.log(chalk.gray('  routes/about.tsx          → /about'));
-      console.log(chalk.gray('  routes/[postId].tsx       → /:postId'));
-      console.log(chalk.gray('  routes/posts/[id].tsx     → /posts/:id'));
-      console.log(chalk.gray('  routes/api/users.ts       → /api/users'));
-      console.log(chalk.gray('  routes/_layout.tsx        → Layout wrapper'));
-      console.log(chalk.gray('  routes/__root.tsx         → Root layout\n'));
+      cliLogger.warn('No routes directory found');
+      cliLogger.keyValue('Expected', routesDir);
+      cliLogger.newline();
+      cliLogger.info('Create a routes/ directory with your route files to get started');
+      cliLogger.newline();
+      cliLogger.info('Next.js-style conventions:');
+      cliLogger.listItem('routes/index.tsx          → /');
+      cliLogger.listItem('routes/about.tsx          → /about');
+      cliLogger.listItem('routes/[postId].tsx       → /:postId');
+      cliLogger.listItem('routes/posts/[id].tsx     → /posts/:id');
+      cliLogger.listItem('routes/api/users.ts       → /api/users');
+      cliLogger.listItem('routes/_layout.tsx        → Layout wrapper');
+      cliLogger.listItem('routes/__root.tsx         → Root layout');
+      cliLogger.newline();
       return;
     }
 
     // Try to load the router package
-    spinner.start('Loading route scanner...');
+    cliLogger.spinner('loader', 'Loading route scanner...');
 
     let router: any;
 
@@ -111,17 +111,17 @@ export async function routesCommand(options: RoutesOptions): Promise<void> {
         router = await import(clientInternalPath);
       }
     } catch (error) {
-      spinner.fail('Route scanner not found');
-      console.error('Error:', error);
+      cliLogger.failSpinner('loader', 'Route scanner not found');
+      cliLogger.error('Error', error instanceof Error ? error.message : String(error));
       return;
     }
 
-    spinner.succeed('Route scanner loaded');
+    cliLogger.succeedSpinner('loader', 'Route scanner loaded');
 
     // Scan routes
-    spinner.start(`Scanning ${routesDir}...`);
+    cliLogger.spinner('scan', `Scanning ${routesDir}...`);
     const tree = router.scanRoutes(routesDir);
-    spinner.succeed('Routes scanned');
+    cliLogger.succeedSpinner('scan', 'Routes scanned');
 
     // Output JSON if requested
     if (options.json) {
@@ -130,28 +130,30 @@ export async function routesCommand(options: RoutesOptions): Promise<void> {
     }
 
     // Print route summary with code
-    console.log(chalk.white('\n📁 Page Routes:\n'));
+    cliLogger.newline();
+    cliLogger.info('📁 Page Routes:');
+    cliLogger.newline();
     if (tree.routes.length === 0) {
-      console.log(chalk.gray('    (none)'));
+      console.log('    (none)');
     } else {
       for (const route of tree.routes) {
         const params = route.params.length > 0
-          ? chalk.gray(` [${route.params.map((p: { name: string }) => p.name).join(', ')}]`)
+          ? ` [${route.params.map((p: { name: string }) => p.name).join(', ')}]`
           : '';
-        const index = route.isIndex ? chalk.gray(' (index)') : '';
-        
-        console.log(chalk.cyan(`  ${route.urlPath}`) + params + index);
-        console.log(chalk.gray(`    File: ${route.relativePath}`));
-        
+        const index = route.isIndex ? ' (index)' : '';
+
+        console.log(`  ${route.urlPath}${params}${index}`);
+        console.log(`    File: ${route.relativePath}`);
+
         if (showCode) {
           const code = extractHandlerCode(route.filePath);
           if (code && options.verbose) {
-            console.log(chalk.gray('    Handler:'));
+            console.log('    Handler:');
             const codeLines = code.split('\n').map(line => '      ' + line);
-            console.log(chalk.gray(codeLines.join('\n')));
+            console.log(codeLines.join('\n'));
           }
         }
-        
+
         // Show special exports
         const features = [];
         if (route.hasErrorComponent) features.push('error boundary');
@@ -159,68 +161,72 @@ export async function routesCommand(options: RoutesOptions): Promise<void> {
         if (route.hasMeta) features.push('meta tags');
         if (route.hasMiddleware) features.push('middleware');
         if (route.hasGenerateStaticParams) features.push('SSG');
-        
+
         if (features.length > 0) {
-          console.log(chalk.gray(`    Features: ${features.join(', ')}`));
+          console.log(`    Features: ${features.join(', ')}`);
         }
-        
+
         console.log();
       }
     }
 
-    console.log(chalk.white('\n🌐 API Routes:\n'));
+    cliLogger.newline();
+    cliLogger.info('🌐 API Routes:');
+    cliLogger.newline();
     if (tree.apiRoutes.length === 0) {
-      console.log(chalk.gray('    (none)'));
+      console.log('    (none)');
     } else {
       for (const route of tree.apiRoutes) {
         const params = route.params.length > 0
-          ? chalk.gray(` [${route.params.map((p: { name: string }) => p.name).join(', ')}]`)
+          ? ` [${route.params.map((p: { name: string }) => p.name).join(', ')}]`
           : '';
         const methods = route.methods
-          ? chalk.green(` ${route.methods.join(' | ')}`)
+          ? ` ${route.methods.join(' | ')}`
           : '';
-        
-        console.log(chalk.green(`  ${route.urlPath}`) + params);
-        console.log(chalk.gray(`    File: ${route.relativePath}`));
-        console.log(chalk.gray(`    Methods:`) + methods);
-        
+
+        console.log(`  ${route.urlPath}${params}`);
+        console.log(`    File: ${route.relativePath}`);
+        console.log(`    Methods:${methods}`);
+
         if (showCode && route.methods) {
           for (const method of route.methods) {
             const code = extractHandlerCode(route.filePath, method);
             if (code) {
               if (options.verbose) {
-                console.log(chalk.gray(`    ${method} Handler:`));
+                console.log(`    ${method} Handler:`);
                 const codeLines = code.split('\n').map(line => '      ' + line);
-                console.log(chalk.gray(codeLines.join('\n')));
+                console.log(codeLines.join('\n'));
               } else {
                 // Just show first line
                 const firstLine = code.split('\n')[0];
-                console.log(chalk.gray(`    ${method}: ${firstLine.trim()}...`));
+                console.log(`    ${method}: ${firstLine.trim()}...`);
               }
             }
           }
         }
-        
+
         // Show features
         const features = [];
         if (route.hasMiddleware) features.push('middleware');
-        
+
         if (features.length > 0) {
-          console.log(chalk.gray(`    Features: ${features.join(', ')}`));
+          console.log(`    Features: ${features.join(', ')}`);
         }
-        
+
         console.log();
       }
     }
 
     // Show layouts
     if (tree.layouts && tree.layouts.length > 0) {
-      console.log(chalk.white('\n📐 Layouts:\n'));
+      cliLogger.newline();
+      cliLogger.info('📐 Layouts:');
+      cliLogger.newline();
       for (const layout of tree.layouts) {
-        console.log(chalk.magenta(`  ${layout.scopePath || '/'} (scope)`));
-        console.log(chalk.gray(`    File: ${layout.relativePath}`));
+        console.log(`  ${layout.scopePath || '/'} (scope)`);
+        console.log(`    File: ${layout.relativePath}`);
         if (layout.parentLayout) {
-          console.log(chalk.gray(`    Parent: ${layout.parentLayout}`));
+          console.log(`    Parent: ${layout.parentLayout}`);
         }
         console.log();
       }
@@ -228,21 +234,23 @@ export async function routesCommand(options: RoutesOptions): Promise<void> {
 
     // Show WebSocket routes
     if (tree.wsRoutes && tree.wsRoutes.length > 0) {
-      console.log(chalk.white('\n🔌 WebSocket Routes:\n'));
+      cliLogger.newline();
+      cliLogger.info('🔌 WebSocket Routes:');
+      cliLogger.newline();
       for (const route of tree.wsRoutes) {
         const params = route.params.length > 0
-          ? chalk.gray(` [${route.params.map((p: { name: string }) => p.name).join(', ')}]`)
+          ? ` [${route.params.map((p: { name: string }) => p.name).join(', ')}]`
           : '';
-        
-        console.log(chalk.yellow(`  ${route.urlPath}`) + params);
-        console.log(chalk.gray(`    File: ${route.relativePath}`));
+
+        console.log(`  ${route.urlPath}${params}`);
+        console.log(`    File: ${route.relativePath}`);
         console.log();
       }
     }
 
     // Generate route tree files if output is specified
     if (!options.json) {
-      spinner.start('Generating route tree...');
+      cliLogger.spinner('generate', 'Generating route tree...');
 
       if (!existsSync(outputDir)) {
         mkdirSync(outputDir, { recursive: true });
@@ -261,31 +269,35 @@ export async function routesCommand(options: RoutesOptions): Promise<void> {
         });
       }
 
-      spinner.succeed('Route tree generated');
+      cliLogger.succeedSpinner('generate', 'Route tree generated');
 
       // Summary
       const totalRoutes = tree.routes.length + tree.apiRoutes.length + (tree.wsRoutes?.length || 0);
-      console.log(chalk.green(`\n✓ Found ${totalRoutes} total routes:`));
-      console.log(chalk.gray(`  - ${tree.routes.length} page routes`));
-      console.log(chalk.gray(`  - ${tree.apiRoutes.length} API routes`));
+      cliLogger.newline();
+      cliLogger.success(`Found ${totalRoutes} total routes:`);
+      console.log(`  - ${tree.routes.length} page routes`);
+      console.log(`  - ${tree.apiRoutes.length} API routes`);
       if (tree.wsRoutes?.length) {
-        console.log(chalk.gray(`  - ${tree.wsRoutes.length} WebSocket routes`));
+        console.log(`  - ${tree.wsRoutes.length} WebSocket routes`);
       }
       if (tree.layouts?.length) {
-        console.log(chalk.gray(`  - ${tree.layouts.length} layouts`));
+        console.log(`  - ${tree.layouts.length} layouts`);
       }
-      console.log(chalk.gray(`\n  Output: ${outputDir}\n`));
+      cliLogger.newline();
+      cliLogger.keyValue('Output', outputDir);
+      cliLogger.newline();
     }
 
     // Tips
     if (!options.verbose && showCode) {
-      console.log(chalk.gray('💡 Tip: Use --verbose flag to see full handler code\n'));
+      cliLogger.info('💡 Tip: Use --verbose flag to see full handler code');
+      cliLogger.newline();
     }
 
   } catch (error) {
-    spinner.fail('Route scanning failed');
+    cliLogger.error('Route scanning failed');
     if (error instanceof Error) {
-      console.error(chalk.red(`\nError: ${error.message}\n`));
+      cliLogger.error('Error details', error.message);
       if (options.verbose) {
         console.error(error.stack);
       }

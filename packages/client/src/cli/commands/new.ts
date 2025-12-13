@@ -1,9 +1,8 @@
 import { execSync } from 'child_process';
-import chalk from 'chalk';
 import inquirer from 'inquirer';
 import fsExtra from 'fs-extra';
 import { join, resolve } from 'path';
-import ora from 'ora';
+import { cliLogger } from '../utils/logger.js';
 
 const { ensureDirSync, writeFileSync } = fsExtra;
 
@@ -14,30 +13,29 @@ export interface NewOptions {
 }
 
 /**
- * Create a new ZapRS project
+ * Create a new ZapJS project
  */
 export async function newCommand(name: string, options: NewOptions): Promise<void> {
   if (!name || name.trim() === '') {
-    console.error(chalk.red('Error: Project name is required'));
+    cliLogger.error('Project name is required');
     process.exit(1);
   }
 
   const projectDir = resolve(process.cwd(), name);
-  const spinner = ora();
 
   try {
     // Check if directory already exists
     try {
       const fs = await import('fs');
       if (fs.existsSync(projectDir)) {
-        console.error(
-          chalk.red(`\nError: Directory "${name}" already exists.\n`)
-        );
+        cliLogger.error(`Directory "${name}" already exists`);
         process.exit(1);
       }
     } catch (error) {
       // Directory doesn't exist, which is good
     }
+
+    cliLogger.header(`Create New ZapJS Project: ${name}`);
 
     // Prompt for template if not specified
     let template = options.template;
@@ -60,29 +58,29 @@ export async function newCommand(name: string, options: NewOptions): Promise<voi
     }
 
     // Create project directory
-    spinner.start(`Creating project directory...`);
+    cliLogger.spinner('dir', 'Creating project directory...');
     ensureDirSync(projectDir);
-    spinner.succeed('Project directory created');
+    cliLogger.succeedSpinner('dir', 'Project directory created');
 
     // Create project files
-    spinner.start(`Creating ${template} project...`);
+    cliLogger.spinner('files', `Creating ${template} project...`);
     createMinimalProject(projectDir, name, template);
-    spinner.succeed('Project files created');
+    cliLogger.succeedSpinner('files', 'Project files created');
 
     // Install dependencies
     if (options.install !== false) {
-      spinner.start('Installing dependencies...');
+      cliLogger.spinner('deps', 'Installing dependencies...');
       try {
         execSync('npm install', { cwd: projectDir, stdio: 'pipe' });
-        spinner.succeed('Dependencies installed');
+        cliLogger.succeedSpinner('deps', 'Dependencies installed');
       } catch (error) {
-        spinner.warn('Note: npm install skipped. Run "npm install" manually.');
+        cliLogger.warn('npm install skipped. Run "npm install" manually.');
       }
     }
 
     // Initialize git
     if (options.git !== false) {
-      spinner.start('Initializing git repository...');
+      cliLogger.spinner('git', 'Initializing git repository...');
       try {
         execSync('git init', { cwd: projectDir, stdio: 'pipe' });
         execSync('git add .', { cwd: projectDir, stdio: 'pipe' });
@@ -90,28 +88,29 @@ export async function newCommand(name: string, options: NewOptions): Promise<voi
           cwd: projectDir,
           stdio: 'pipe',
         });
-        spinner.succeed('Git repository initialized');
+        cliLogger.succeedSpinner('git', 'Git repository initialized');
       } catch (error) {
-        spinner.warn('Git initialization skipped');
+        cliLogger.warn('Git initialization skipped');
       }
     }
 
     // Success message
-    console.log(
-      `\n${chalk.green('✓')} Project ${chalk.bold(name)} created successfully!\n`
-    );
+    cliLogger.newline();
+    cliLogger.success(`Project ${name} created successfully!`);
+    cliLogger.newline();
 
     // Next steps
-    console.log(chalk.bold('Next steps:'));
-    console.log(`  ${chalk.cyan(`cd ${name}`)}`);
-    console.log(`  ${chalk.cyan('cargo build --release')}`);
-    console.log(`  ${chalk.cyan('zap dev')}\n`);
-
-    console.log(chalk.gray('Happy coding! 🚀\n'));
+    cliLogger.info('Next steps:');
+    cliLogger.command(`cd ${name}`);
+    cliLogger.command('cargo build --release');
+    cliLogger.command('zap dev');
+    cliLogger.newline();
+    cliLogger.info('Happy coding! 🚀');
+    cliLogger.newline();
   } catch (error) {
-    spinner.fail('Project creation failed');
+    cliLogger.error('Project creation failed');
     if (error instanceof Error) {
-      console.error(chalk.red(`\nError: ${error.message}\n`));
+      cliLogger.error('Error details', error.message);
     }
     process.exit(1);
   }

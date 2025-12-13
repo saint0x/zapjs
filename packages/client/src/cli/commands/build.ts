@@ -1,8 +1,7 @@
 import { execSync } from 'child_process';
-import chalk from 'chalk';
-import ora, { Ora } from 'ora';
 import { join, resolve } from 'path';
 import { existsSync, mkdirSync, copyFileSync, readdirSync, statSync, rmSync, writeFileSync } from 'fs';
+import { cliLogger } from '../utils/logger.js';
 
 export interface BuildOptions {
   release?: boolean;
@@ -24,18 +23,17 @@ interface BuildManifest {
  * Build for production
  */
 export async function buildCommand(options: BuildOptions): Promise<void> {
-  const spinner = ora();
   const outputDir = resolve(options.output || './dist');
   const startTime = Date.now();
 
   try {
-    console.log(chalk.cyan('\n⚡ ZapRS Production Build\n'));
+    cliLogger.header('ZapJS Production Build');
 
     // Clean output directory
     if (existsSync(outputDir)) {
-      spinner.start('Cleaning output directory...');
+      cliLogger.spinner('clean', 'Cleaning output directory...');
       rmSync(outputDir, { recursive: true, force: true });
-      spinner.succeed('Output directory cleaned');
+      cliLogger.succeedSpinner('clean', 'Output directory cleaned');
     }
 
     // Create output structure
@@ -43,17 +41,17 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     mkdirSync(join(outputDir, 'bin'), { recursive: true });
 
     // Step 1: Build Rust binary
-    await buildRust(spinner, outputDir, options);
+    await buildRust(outputDir, options);
 
     // Step 2: Build frontend (if not skipped)
     let staticDir: string | null = null;
     if (!options.skipFrontend) {
-      staticDir = await buildFrontend(spinner, outputDir);
+      staticDir = await buildFrontend(outputDir);
     }
 
     // Step 3: Generate TypeScript bindings
     if (!options.skipCodegen) {
-      await runCodegen(spinner);
+      await runCodegen();
     }
 
     // Step 4: Create production config
@@ -70,32 +68,31 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
     const binSize = getBinarySize(join(outputDir, 'bin', 'zap'));
 
-    console.log(chalk.green(`\n✓ Build complete in ${elapsed}s\n`));
-    console.log(chalk.white('  Output:'));
-    console.log(chalk.gray(`    Directory: ${outputDir}`));
-    console.log(chalk.gray(`    Binary:    ${binSize}`));
+    cliLogger.newline();
+    cliLogger.success(`Build complete in ${elapsed}s`);
+    cliLogger.newline();
+    cliLogger.keyValue('Directory', outputDir);
+    cliLogger.keyValue('Binary', binSize);
     if (staticDir) {
-      console.log(chalk.gray(`    Static:    ${join(outputDir, 'static')}`));
+      cliLogger.keyValue('Static', join(outputDir, 'static'));
     }
-    console.log();
-    console.log(chalk.white('  Run in production:'));
-    console.log(chalk.cyan(`    cd ${outputDir} && ./bin/zap\n`));
+    cliLogger.newline();
+    cliLogger.command(`cd ${outputDir} && ./bin/zap`, 'Run in production');
+    cliLogger.newline();
 
   } catch (error) {
-    spinner.fail('Build failed');
     if (error instanceof Error) {
-      console.error(chalk.red(`\nError: ${error.message}\n`));
+      cliLogger.error('Build failed', error);
     }
     process.exit(1);
   }
 }
 
 async function buildRust(
-  spinner: Ora,
   outputDir: string,
   options: BuildOptions
 ): Promise<void> {
-  spinner.start('Building Rust backend (release mode)...');
+  cliLogger.spinner('rust', 'Building Rust backend (release mode)...');
 
   const args = ['build', '--release', '--bin', 'zap'];
 
@@ -123,26 +120,25 @@ async function buildRust(
       throw new Error(`Binary not found at ${srcBinary}`);
     }
 
-    spinner.succeed('Rust backend built (release + LTO)');
+    cliLogger.succeedSpinner('rust', 'Rust backend built (release + LTO)');
   } catch (error) {
-    spinner.fail('Rust build failed');
+    cliLogger.failSpinner('rust', 'Rust build failed');
     throw error;
   }
 }
 
 async function buildFrontend(
-  spinner: Ora,
   outputDir: string
 ): Promise<string | null> {
   const viteConfig = ['vite.config.ts', 'vite.config.js', 'vite.config.mjs']
     .find(f => existsSync(join(process.cwd(), f)));
 
   if (!viteConfig) {
-    spinner.info('No Vite config found, skipping frontend build');
+    cliLogger.info('No Vite config found, skipping frontend build');
     return null;
   }
 
-  spinner.start('Building frontend (Vite)...');
+  cliLogger.spinner('vite', 'Building frontend (Vite)...');
 
   try {
     execSync('npx vite build', {
@@ -155,20 +151,20 @@ async function buildFrontend(
 
     if (existsSync(viteDist)) {
       copyDirectory(viteDist, staticDir);
-      spinner.succeed('Frontend built and bundled');
+      cliLogger.succeedSpinner('vite', 'Frontend built and bundled');
       return staticDir;
     } else {
-      spinner.warn('Vite build completed but no output found');
+      cliLogger.warn('Vite build completed but no output found');
       return null;
     }
   } catch {
-    spinner.warn('Frontend build failed (continuing without frontend)');
+    cliLogger.warn('Frontend build failed (continuing without frontend)');
     return null;
   }
 }
 
-async function runCodegen(spinner: Ora): Promise<void> {
-  spinner.start('Generating TypeScript bindings...');
+async function runCodegen(): Promise<void> {
+  cliLogger.spinner('codegen', 'Generating TypeScript bindings...');
 
   const codegenPaths = [
     join(process.cwd(), 'target/release/zap-codegen'),
@@ -181,14 +177,14 @@ async function runCodegen(spinner: Ora): Promise<void> {
         cwd: process.cwd(),
         stdio: 'pipe',
       });
-      spinner.succeed('TypeScript bindings generated');
+      cliLogger.succeedSpinner('codegen', 'TypeScript bindings generated');
       return;
     } catch {
       continue;
     }
   }
 
-  spinner.info('Codegen skipped (binary not found)');
+  cliLogger.info('Codegen skipped (binary not found)');
 }
 
 async function createProductionConfig(

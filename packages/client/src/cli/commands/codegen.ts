@@ -1,6 +1,5 @@
 import { execSync } from 'child_process';
-import chalk from 'chalk';
-import ora from 'ora';
+import { cliLogger } from '../utils/logger.js';
 
 export interface CodegenOptions {
   input?: string;
@@ -11,13 +10,12 @@ export interface CodegenOptions {
  * Generate TypeScript bindings from Rust exports
  */
 export async function codegenCommand(options: CodegenOptions): Promise<void> {
-  const spinner = ora();
   const outputDir = options.output || './src/api';
 
   try {
-    console.log(chalk.cyan('\n📝 Generating TypeScript bindings...\n'));
+    cliLogger.header('Generating TypeScript Bindings');
 
-    spinner.start(`Generating bindings to ${outputDir}...`);
+    cliLogger.spinner('codegen', `Generating bindings to ${outputDir}...`);
 
     try {
       let cmd = 'zap-codegen';
@@ -34,23 +32,22 @@ export async function codegenCommand(options: CodegenOptions): Promise<void> {
         stdio: 'pipe',
       });
 
-      spinner.succeed('TypeScript bindings generated');
+      cliLogger.succeedSpinner('codegen', 'TypeScript bindings generated');
     } catch (error) {
-      spinner.fail('Codegen failed');
-      console.error(
-        chalk.red(
-          '\nMake sure zap-codegen is installed:\n  npm install -g @zapjs/codegen\n'
-        )
-      );
+      cliLogger.failSpinner('codegen', 'Codegen failed');
+      cliLogger.error('Make sure zap-codegen is installed');
+      cliLogger.command('npm install -g @zapjs/codegen');
       process.exit(1);
     }
 
-    console.log(chalk.green('\n✓ Codegen complete!\n'));
-    console.log(chalk.gray(`Generated files in: ${outputDir}\n`));
+    cliLogger.newline();
+    cliLogger.success('Codegen complete!');
+    cliLogger.keyValue('Generated files in', outputDir);
+    cliLogger.newline();
   } catch (error) {
-    spinner.fail('Codegen failed');
+    cliLogger.error('Codegen failed');
     if (error instanceof Error) {
-      console.error(chalk.red(`\nError: ${error.message}\n`));
+      cliLogger.error('Error details', error.message);
     }
     process.exit(1);
   }

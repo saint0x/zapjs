@@ -1,7 +1,7 @@
-import chalk from 'chalk';
 import path from 'path';
 import { existsSync } from 'fs';
 import { DevServer, DevServerConfig } from '../../dev-server/index.js';
+import { cliLogger } from '../utils/logger.js';
 
 export interface DevOptions {
   port?: string;
@@ -71,7 +71,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   // Log if using pre-built binaries
   if (config.binaryPath) {
-    console.log(chalk.blue(`Using pre-built binary: ${config.binaryPath}`));
+    cliLogger.info('Using pre-built binary', config.binaryPath);
   }
 
   const server = new DevServer(config);
@@ -92,7 +92,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     await new Promise(() => {});
   } catch (error) {
     if (error instanceof Error) {
-      console.error(chalk.red(`\nError: ${error.message}\n`));
+      cliLogger.error('Development server failed', error);
     }
     process.exit(1);
   }
