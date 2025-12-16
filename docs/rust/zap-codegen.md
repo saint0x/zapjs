@@ -48,7 +48,7 @@ The primary generated file providing a namespaced API:
 ```typescript
 // src/generated/server.ts
 
-import { rpcCall } from '@zapjs/runtime';
+import { rpcCall } from '@zap-js/client';
 
 export const server = {
   users: {
@@ -89,7 +89,7 @@ Alternative flat export style:
 ```typescript
 // src/generated/backend.ts
 
-import { rpcCall } from '@zapjs/runtime';
+import { rpcCall } from '@zap-js/client';
 
 export async function getUser(id: number): Promise<User> {
   return rpcCall('get_user', { id });
@@ -350,7 +350,7 @@ When using `--input`, provide a JSON file:
 
 ### Development Mode
 
-The `@zapjs/dev-server` runs codegen automatically:
+The `@zap-js/client` runs codegen automatically:
 
 ```typescript
 // packages/dev-server/src/codegen-runner.ts

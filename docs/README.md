@@ -27,10 +27,10 @@ TypeScript package APIs for building Zap.js applications.
 
 | Document | Package | Description |
 |----------|---------|-------------|
-| [Runtime API](./api/runtime.md) | `@zapjs/runtime` | Core Zap class, process management, IPC |
-| [Router API](./api/router.md) | `@zapjs/router` | File-based routing, route scanning |
-| [CLI Reference](./api/cli.md) | `@zapjs/cli` | Command-line tools |
-| [Dev Server API](./api/dev-server.md) | `@zapjs/dev-server` | Development orchestration |
+| [Runtime API](./api/runtime.md) | `@zap-js/client` | Core Zap class, process management, IPC |
+| [Router API](./api/router.md) | `@zap-js/client` | File-based routing, route scanning |
+| [CLI Reference](./api/cli.md) | `@zap-js/client` | Command-line tools |
+| [Dev Server API](./api/dev-server.md) | `@zap-js/client` | Development orchestration |
 
 ### Rust Crates
 

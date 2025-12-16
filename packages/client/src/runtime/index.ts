@@ -546,4 +546,122 @@ export class Zap {
   }
 }
 
+// ============================================================================
+// Namespace Exports (Clean API)
+// ============================================================================
+
+/**
+ * Router namespace - all routing functionality
+ * Usage: import { router } from '@zap-js/client'
+ */
+import {
+  RouterProvider,
+  useRouter as useRouterFn,
+  useParams as useParamsFn,
+  usePathname as usePathnameFn,
+  useSearchParams as useSearchParamsFn,
+  useRouteMatch as useRouteMatchFn,
+  useIsPending as useIsPendingFn,
+  Link,
+  NavLink,
+  Outlet,
+  Redirect,
+} from "./router.js";
+export const router = {
+  RouterProvider,
+  useRouter: useRouterFn,
+  useParams: useParamsFn,
+  usePathname: usePathnameFn,
+  useSearchParams: useSearchParamsFn,
+  useRouteMatch: useRouteMatchFn,
+  useIsPending: useIsPendingFn,
+  Link,
+  NavLink,
+  Outlet,
+  Redirect,
+};
+
+/**
+ * Errors namespace - error handling and boundaries
+ * Usage: import { errors } from '@zap-js/client'
+ */
+import {
+  ErrorBoundary,
+  DefaultErrorComponent,
+  createRouteError,
+  ZapError,
+} from "./error-boundary.js";
+import {
+  useRouteError,
+  useIsErrorState,
+  useErrorState,
+} from "./hooks.js";
+export const errors = {
+  ErrorBoundary,
+  DefaultErrorComponent,
+  createRouteError,
+  ZapError,
+  useRouteError,
+  useIsErrorState,
+  useErrorState,
+} as const;
+
+/**
+ * Middleware namespace - middleware utilities
+ * Usage: import { middleware } from '@zap-js/client'
+ */
+export const middleware = {
+  // Placeholder for future middleware utilities
+};
+
+/**
+ * Types namespace - type definitions and guards
+ * Usage: import { types } from '@zap-js/client'
+ */
+import * as TypeGuards from "./types.js";
+export const types = {
+  isInvokeHandlerMessage: TypeGuards.isInvokeHandlerMessage,
+  isHandlerResponseMessage: TypeGuards.isHandlerResponseMessage,
+  isErrorMessage: TypeGuards.isErrorMessage,
+  isHealthCheckMessage: TypeGuards.isHealthCheckMessage,
+  isHealthCheckResponseMessage: TypeGuards.isHealthCheckResponseMessage,
+  isRpcResponseMessage: TypeGuards.isRpcResponseMessage,
+  isRpcErrorMessage: TypeGuards.isRpcErrorMessage,
+  isAsyncIterable: TypeGuards.isAsyncIterable,
+};
+
+/**
+ * WebSockets namespace - WebSocket utilities and helpers
+ * Usage: import { websockets } from '@zap-js/client'
+ */
+import * as WebSocketUtils from "./websockets-utils.js";
+export const websockets = {
+  isWsMessage: WebSocketUtils.isWsMessage,
+  broadcast: WebSocketUtils.broadcast,
+  broadcastExcept: WebSocketUtils.broadcastExcept,
+  sendJson: WebSocketUtils.sendJson,
+  parseMessage: WebSocketUtils.parseMessage,
+  createErrorMessage: WebSocketUtils.createErrorMessage,
+  createSuccessMessage: WebSocketUtils.createSuccessMessage,
+} as const;
+
+/**
+ * Streaming namespace - Streaming response utilities
+ * Usage: import { streaming } from '@zap-js/client'
+ */
+import * as StreamingUtils from "./streaming-utils.js";
+export const streaming = {
+  isAsyncIterable: StreamingUtils.isAsyncIterable,
+  createChunk: StreamingUtils.createChunk,
+  createStream: StreamingUtils.createStream,
+  streamJson: StreamingUtils.streamJson,
+  streamSSE: StreamingUtils.streamSSE,
+  mapStream: StreamingUtils.mapStream,
+  filterStream: StreamingUtils.filterStream,
+  batchStream: StreamingUtils.batchStream,
+  delayStream: StreamingUtils.delayStream,
+  fromReadableStream: StreamingUtils.fromReadableStream,
+  intervalStream: StreamingUtils.intervalStream,
+} as const;
+
 export default Zap;

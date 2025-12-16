@@ -192,7 +192,7 @@ Accessible at: `GET /api/hello`
 
 ```typescript
 // routes/api/users.ts
-import type { ZapRequest } from '@zapjs/runtime';
+import type { ZapRequest } from '@zap-js/client';
 import { backend } from '../../src/api/backend';
 
 export const GET = async (req: ZapRequest) => {
@@ -383,7 +383,7 @@ Wrap pages with shared UI.
 
 ```tsx
 // routes/_layout.tsx
-import { Outlet } from '@zapjs/runtime';
+import { Outlet } from '@zap-js/client';
 
 export default function RootLayout() {
   return (
@@ -412,7 +412,7 @@ export default function RootLayout() {
 // routes/dashboard/_layout.tsx
 // Applies to all /dashboard/* routes
 
-import { Outlet } from '@zapjs/runtime';
+import { Outlet } from '@zap-js/client';
 
 export default function DashboardLayout() {
   return (
@@ -516,7 +516,7 @@ Real-time bidirectional communication.
 
 ```typescript
 // routes/api/ws-chat.ts
-import type { WsConnection, WsHandler } from '@zapjs/runtime';
+import type { WsConnection, WsHandler } from '@zap-js/client';
 
 const clients = new Map<string, WsConnection>();
 
@@ -768,7 +768,7 @@ import {
   useParams,
   useSearchParams,
   Redirect,
-} from '@zapjs/runtime';
+} from '@zap-js/client';
 ```
 
 ### Link Component
@@ -800,7 +800,7 @@ import {
 ### Programmatic Navigation
 
 ```tsx
-import { useRouter } from '@zapjs/runtime';
+import { useRouter } from '@zap-js/client';
 
 function MyComponent() {
   const router = useRouter();
@@ -826,7 +826,7 @@ function MyComponent() {
 ### Route Hooks
 
 ```tsx
-import { usePathname, useParams, useSearchParams } from '@zapjs/runtime';
+import { usePathname, useParams, useSearchParams } from '@zap-js/client';
 
 function MyComponent() {
   const pathname = usePathname();  // '/blog/hello-world'
@@ -842,7 +842,7 @@ function MyComponent() {
 ### Redirect Component
 
 ```tsx
-import { Redirect } from '@zapjs/runtime';
+import { Redirect } from '@zap-js/client';
 
 function ProtectedRoute({ children, isAuthenticated }) {
   if (!isAuthenticated) {
@@ -925,7 +925,7 @@ const path: RoutePath = '/invalid';     // Type error
 ### zap.config.ts
 
 ```typescript
-import { defineConfig } from '@zapjs/cli';
+import { defineConfig } from '@zap-js/client';
 
 export default defineConfig({
   // Server options
@@ -1020,7 +1020,7 @@ import {
 
   // Logger
   logger,
-} from '@zapjs/runtime';
+} from '@zap-js/client';
 ```
 
 ---

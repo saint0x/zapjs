@@ -212,7 +212,7 @@ export const POST = async (req: ZapRequest) => {
 **`routes/api/users.ts`**
 
 ```typescript
-import type { ZapRequest } from '@zapjs/runtime';
+import type { ZapRequest } from '@zap-js/client';
 
 // In-memory store (replace with database)
 let users = [
@@ -264,7 +264,7 @@ export const POST = async (req: ZapRequest) => {
 **`routes/api/users.$id.ts`**
 
 ```typescript
-import type { ZapRequest } from '@zapjs/runtime';
+import type { ZapRequest } from '@zap-js/client';
 
 // GET /api/users/:id
 export const GET = async (req: ZapRequest) => {

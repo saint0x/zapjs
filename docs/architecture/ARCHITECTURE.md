@@ -385,7 +385,7 @@ Export HTTP method handlers:
 
 ```typescript
 // routes/api/users.ts
-import type { ZapRequest } from '@zapjs/runtime';
+import type { ZapRequest } from '@zap-js/client';
 
 export const GET = async (req: ZapRequest) => {
   const users = await backend.listUsers(10, 0);
@@ -508,7 +508,7 @@ Export a `WEBSOCKET` handler for WebSocket routes:
 
 ```typescript
 // routes/api/ws-echo.ts
-import type { WsConnection, WsHandler } from '@zapjs/runtime';
+import type { WsConnection, WsHandler } from '@zap-js/client';
 
 const clients = new Map<string, WsConnection>();
 

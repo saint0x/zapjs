@@ -24,7 +24,7 @@ Client (React) → File Routes → TypeScript Handlers
 
 ### Client
 ```javascript
-import { router, middleware, errors, logger, types } from '@zap-js/client'
+import { router, websockets, streaming, middleware, errors, logger, types } from '@zap-js/client'
 ```
 
 ### Server

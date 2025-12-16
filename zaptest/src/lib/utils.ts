@@ -102,8 +102,8 @@ export function highlightCode(code: string, lang: 'rust' | 'typescript'): Token[
       continue;
     }
 
-    // @zapjs/...
-    if (code.slice(i, i + 7) === '@zapjs/') {
+    // @zap-js/...
+    if (code.slice(i, i + 8) === '@zap-js/') {
       let j = i + 7;
       while (j < code.length && /\w/.test(code[j])) j++;
       tokens.push({ text: code.slice(i, j), color: HIGHLIGHT_COLORS.special });

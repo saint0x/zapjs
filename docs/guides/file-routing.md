@@ -72,7 +72,7 @@ routes/
 **Example: `routes/users/$id.tsx`**
 
 ```tsx
-import type { ZapRequest } from '@zapjs/runtime';
+import type { ZapRequest } from '@zap-js/client';
 
 export default function UserPage({ params }: { params: { id: string } }) {
   return <h1>User {params.id}</h1>;
@@ -257,7 +257,7 @@ export const POST = async (req: ZapRequest) => {
 **`routes/api/users.$id.ts`**
 
 ```typescript
-import type { ZapRequest } from '@zapjs/runtime';
+import type { ZapRequest } from '@zap-js/client';
 
 // GET /api/users/:id
 export const GET = async (req: ZapRequest) => {

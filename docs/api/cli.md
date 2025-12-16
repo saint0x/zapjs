@@ -1,13 +1,13 @@
-# @zapjs/cli
+# @zap-js/client
 
-The `@zapjs/cli` package provides command-line tools for developing, building, and deploying Zap.js applications.
+The `@zap-js/client` package provides command-line tools for developing, building, and deploying Zap.js applications.
 
 ## Installation
 
 ```bash
-npm install -g @zapjs/cli
+npm install -g @zap-js/client
 # or use via npx
-npx @zapjs/cli <command>
+npx @zap-js/client <command>
 ```
 
 ## Commands
@@ -299,7 +299,7 @@ src/api/
 ### zap.config.ts
 
 ```typescript
-import { defineConfig } from '@zapjs/cli';
+import { defineConfig } from '@zap-js/client';
 
 export default defineConfig({
   server: {

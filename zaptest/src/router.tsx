@@ -1,7 +1,7 @@
 /**
  * Simple client-side router for zaptest landing site
  *
- * Demonstrates the @zapjs/runtime router API in a simple SPA context.
+ * Demonstrates the @zap-js/client router API in a simple SPA context.
  * For full file-based routing, use the RouterProvider with generated routes.
  */
 

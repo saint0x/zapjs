@@ -30,22 +30,22 @@ Zap.js is a fullstack web framework that combines **React** (frontend) with **Ru
 │  │      TypeScript Layer       │    │          Rust Layer                 │ │
 │  ├─────────────────────────────┤    ├─────────────────────────────────────┤ │
 │  │                             │    │                                     │ │
-│  │  @zapjs/runtime             │◄──►│  zap-server (HTTP Server)           │ │
+│  │  @zap-js/client             │◄──►│  zap-server (HTTP Server)           │ │
 │  │  - Zap class                │IPC │  - Hyper/Tokio async runtime        │ │
 │  │  - ProcessManager           │    │  - Radix router (9ns lookups)       │ │
 │  │  - IpcServer/Client         │    │  - Middleware chain                 │ │
 │  │                             │    │  - Static file serving              │ │
-│  │  @zapjs/router              │    │                                     │ │
+│  │  @zap-js/client              │    │                                     │ │
 │  │  - File-based routing       │    │  zap-core (Primitives)              │ │
 │  │  - TanStack conventions     │    │  - Zero-copy HTTP parsing           │ │
 │  │  - Route tree generation    │    │  - Method/Params/Headers            │ │
 │  │                             │    │  - Request/Response types           │ │
-│  │  @zapjs/dev-server          │    │                                     │ │
+│  │  @zap-js/client          │    │                                     │ │
 │  │  - Hot reload orchestration │    │  zap-macros                         │ │
 │  │  - Rust builder             │    │  - #[zap::export] proc macro        │ │
 │  │  - Vite proxy               │    │  - Type metadata extraction         │ │
 │  │                             │    │                                     │ │
-│  │  @zapjs/cli                 │    │  zap-codegen                        │ │
+│  │  @zap-js/client                 │    │  zap-codegen                        │ │
 │  │  - zap dev/build/serve      │    │  - TypeScript binding generator     │ │
 │  │                             │    │  - Namespaced server client         │ │
 │  │                             │    │                                     │ │
@@ -70,10 +70,10 @@ Zap.js is a fullstack web framework that combines **React** (frontend) with **Ru
 
 | Package | Purpose |
 |---------|---------|
-| `@zapjs/runtime` | Core wrapper: Zap class, process management, IPC communication |
-| `@zapjs/router` | File-based routing scanner, route tree generation |
-| `@zapjs/cli` | CLI commands: `dev`, `build`, `serve`, `codegen`, `routes` |
-| `@zapjs/dev-server` | Development orchestration: Rust builder, Vite proxy, hot reload |
+| `@zap-js/client` | Core wrapper: Zap class, process management, IPC communication |
+| `@zap-js/client` | File-based routing scanner, route tree generation |
+| `@zap-js/client` | CLI commands: `dev`, `build`, `serve`, `codegen`, `routes` |
+| `@zap-js/client` | Development orchestration: Rust builder, Vite proxy, hot reload |
 | `create-zap-app` | Project scaffolding tool |
 
 ### Rust Crates
@@ -283,7 +283,7 @@ Configurable via `ZapConfig.ipc_socket_path`
 │ │Bld │ │ Runner │ │ Scanner  │ │   Proxy     │ │   Server      │        │  │
 │ └──┬─┘ └────┬───┘ └────┬─────┘ └──────┬──────┘ └───────┬───────┘        │  │
 │    │        │          │              │                │                │  │
-│    │ cargo  │ zap-     │ @zapjs/      │ localhost      │ WebSocket      │  │
+│    │ cargo  │ zap-     │ @zap-js/     │ localhost      │ WebSocket      │  │
 │    │ build  │ codegen  │ router       │ :5173          │ :3001          │  │
 │    │        │          │              │                │                │  │
 │    ▼        ▼          ▼              ▼                ▼                │  │

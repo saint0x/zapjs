@@ -8,7 +8,7 @@
  * Connect at: ws://localhost:3000/api/ws-echo
  */
 
-import type { WsConnection, WsHandler } from '@zapjs/runtime';
+import type { WsConnection, WsHandler } from '@zap-js/client';
 
 // Track connected clients
 const clients = new Map<string, { connection: WsConnection; connectedAt: number }>();

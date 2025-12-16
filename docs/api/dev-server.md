@@ -1,13 +1,13 @@
-# @zapjs/dev-server
+# @zap-js/client
 
-The `@zapjs/dev-server` package provides the development orchestration engine for Zap.js, coordinating Rust compilation, TypeScript bundling, hot reload, and route scanning.
+The `@zap-js/client` package provides the development orchestration engine for Zap.js, coordinating Rust compilation, TypeScript bundling, hot reload, and route scanning.
 
 ## Installation
 
 ```bash
-npm install @zapjs/dev-server
+npm install @zap-js/client
 # or
-bun add @zapjs/dev-server
+bun add @zap-js/client
 ```
 
 ## DevServer
@@ -17,7 +17,7 @@ The main orchestration class that coordinates all development components.
 ### Usage
 
 ```typescript
-import { DevServer } from '@zapjs/dev-server';
+import { DevServer } from '@zap-js/client';
 
 const server = new DevServer({
   projectDir: process.cwd(),
@@ -136,7 +136,7 @@ Handles Rust compilation with incremental builds.
 ### Usage
 
 ```typescript
-import { RustBuilder } from '@zapjs/dev-server';
+import { RustBuilder } from '@zap-js/client';
 
 const builder = new RustBuilder({
   projectDir: './server',
@@ -202,7 +202,7 @@ Watches filesystem for changes.
 ### Usage
 
 ```typescript
-import { FileWatcher } from '@zapjs/dev-server';
+import { FileWatcher } from '@zap-js/client';
 
 const watcher = new FileWatcher({
   paths: ['./src', './routes'],
@@ -246,7 +246,7 @@ WebSocket server for signaling hot reload to browsers.
 ### Usage
 
 ```typescript
-import { HotReloadServer } from '@zapjs/dev-server';
+import { HotReloadServer } from '@zap-js/client';
 
 const hotReload = new HotReloadServer({
   port: 3001,
@@ -318,7 +318,7 @@ Proxies requests to the Vite dev server.
 ### Usage
 
 ```typescript
-import { ViteProxy } from '@zapjs/dev-server';
+import { ViteProxy } from '@zap-js/client';
 
 const proxy = new ViteProxy({
   vitePort: 5173,
@@ -344,7 +344,7 @@ Runs TypeScript binding generation.
 ### Usage
 
 ```typescript
-import { CodegenRunner } from '@zapjs/dev-server';
+import { CodegenRunner } from '@zap-js/client';
 
 const codegen = new CodegenRunner({
   projectDir: './server',
@@ -366,7 +366,7 @@ Watches and regenerates routes.
 ### Usage
 
 ```typescript
-import { RouteScannerRunner } from '@zapjs/dev-server';
+import { RouteScannerRunner } from '@zap-js/client';
 
 const scanner = new RouteScannerRunner({
   routesDir: './routes',
@@ -395,7 +395,7 @@ import {
   HotReloadServer,
   CodegenRunner,
   RouteScannerRunner,
-} from '@zapjs/dev-server';
+} from '@zap-js/client';
 
 async function startDevEnvironment() {
   const projectDir = process.cwd();

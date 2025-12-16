@@ -368,11 +368,11 @@ function ArchitectureSection() {
 │  │  TypeScript Layer │◄────►│       Rust Layer           │  │
 │  ├───────────────────┤  IPC ├────────────────────────────┤  │
 │  │                   │      │                            │  │
-│  │  @zapjs/runtime   │      │  zap-server (HTTP Server)  │  │
+│  │  @zap-js/client   │      │  zap-server (HTTP Server)  │  │
 │  │  - Zap class      │      │  - Radix router (20ns)     │  │
 │  │  - IPC client     │      │  - Middleware chain        │  │
 │  │                   │      │  - Static file serving     │  │
-│  │  @zapjs/router    │      │                            │  │
+│  │  @zap-js/client    │      │                            │  │
 │  │  - File routing   │      │  zap-core (Primitives)     │  │
 │  │  - Route scanning │      │  - Zero-copy HTTP parsing  │  │
 │  │                   │      │  - Request/Response types  │  │
@@ -883,7 +883,7 @@ function ClientRouterSection() {
 
       <Heading level={2}>Available Exports</Heading>
       <Para>
-        Import router utilities from <code className="text-zap-400">@zapjs/runtime</code>:
+        Import router utilities from <code className="text-zap-400">@zap-js/client</code>:
       </Para>
       <CodeBlock
         lang="typescript"
@@ -908,14 +908,14 @@ function ClientRouterSection() {
   ErrorBoundary,
   useRouteError,
   DefaultErrorComponent,
-} from '@zapjs/runtime';`}
+} from '@zap-js/client';`}
       />
 
       <Heading level={2}>Navigation Hooks</Heading>
       <CodeBlock
         lang="typescript"
         filename="Using Router Hooks"
-        code={`import { useRouter, useParams, usePathname, useSearchParams } from '@zapjs/runtime';
+        code={`import { useRouter, useParams, usePathname, useSearchParams } from '@zap-js/client';
 
 function MyComponent() {
   const router = useRouter();
@@ -938,7 +938,7 @@ function MyComponent() {
       <CodeBlock
         lang="typescript"
         filename="Navigation Components"
-        code={`import { Link, NavLink } from '@zapjs/runtime';
+        code={`import { Link, NavLink } from '@zap-js/client';
 
 // Basic link
 <Link to="/posts/123">View Post</Link>
@@ -1096,7 +1096,7 @@ export const GET = async function* () {
       <CodeBlock
         lang="typescript"
         filename="routes/api/ws-echo.ts"
-        code={`import type { WsConnection, WsHandler } from '@zapjs/runtime';
+        code={`import type { WsConnection, WsHandler } from '@zap-js/client';
 
 const clients = new Map<string, WsConnection>();
 
@@ -1219,7 +1219,7 @@ ipc_invoke_duration_seconds{handler_id="handler_0"} 0.008`}
       <CodeBlock
         lang="typescript"
         filename="Using the Logger"
-        code={`import { logger } from '@zapjs/runtime';
+        code={`import { logger } from '@zap-js/client';
 
 logger.info('User created', { request_id, userId: '123' });
 // {"level":"info","message":"User created","request_id":"abc-123","userId":"123","timestamp":"..."}`}
@@ -1264,7 +1264,7 @@ export function errorComponent({ error, reset }) {
       <CodeBlock
         lang="typescript"
         filename="Using useRouteError"
-        code={`import { useRouteError } from '@zapjs/runtime';
+        code={`import { useRouteError } from '@zap-js/client';
 
 export function errorComponent() {
   const { error, reset } = useRouteError();

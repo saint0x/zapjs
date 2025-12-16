@@ -262,7 +262,7 @@ eventSource.addEventListener('complete', () => eventSource.close());`,
     icon: Wifi,
     curl: 'curl http://localhost:3000/api/websocket-info',
     codeSnippet: `// routes/api/ws-echo.ts - WebSocket handler
-import type { WsConnection, WsHandler } from '@zapjs/runtime';
+import type { WsConnection, WsHandler } from '@zap-js/client';
 
 export const WEBSOCKET: WsHandler = {
   onConnect: async (connection) => {

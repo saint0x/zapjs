@@ -118,7 +118,7 @@ Visit http://localhost:5173/about
 **`routes/api/users.ts`**
 
 ```typescript
-import type { ZapRequest } from '@zapjs/runtime';
+import type { ZapRequest } from '@zap-js/client';
 
 // GET /api/users
 export const GET = async (req: ZapRequest) => {
@@ -283,7 +283,7 @@ cd dist && ./bin/zap
 ### zap.config.ts
 
 ```typescript
-import { defineConfig } from '@zapjs/cli';
+import { defineConfig } from '@zap-js/client';
 
 export default defineConfig({
   server: {

@@ -1,13 +1,13 @@
-# @zapjs/runtime
+# @zap-js/client
 
-The `@zapjs/runtime` package provides the core TypeScript wrapper for the Zap.js framework, including the main `Zap` class, process management, and IPC communication.
+The `@zap-js/client` package provides the core TypeScript wrapper for the Zap.js framework, including the main `Zap` class, process management, and IPC communication.
 
 ## Installation
 
 ```bash
-npm install @zapjs/runtime
+npm install @zap-js/client
 # or
-bun add @zapjs/runtime
+bun add @zap-js/client
 ```
 
 ## Zap Class
@@ -17,7 +17,7 @@ The main class for configuring and running a Zap.js application.
 ### Basic Usage
 
 ```typescript
-import { Zap } from '@zapjs/runtime';
+import { Zap } from '@zap-js/client';
 
 const app = new Zap()
   .setPort(3000)
@@ -117,7 +117,7 @@ Manages the Rust binary process lifecycle.
 ### Usage
 
 ```typescript
-import { ProcessManager } from '@zapjs/runtime';
+import { ProcessManager } from '@zap-js/client';
 
 const manager = new ProcessManager();
 
@@ -169,7 +169,7 @@ class ProcessManager {
 Listens for messages from the Rust binary and routes to handlers.
 
 ```typescript
-import { IpcServer } from '@zapjs/runtime';
+import { IpcServer } from '@zap-js/client';
 
 const server = new IpcServer(socketPath);
 
@@ -195,7 +195,7 @@ await server.stop();
 Connects to the Rust IPC server for RPC calls.
 
 ```typescript
-import { IpcClient } from '@zapjs/runtime';
+import { IpcClient } from '@zap-js/client';
 
 const client = new IpcClient();
 await client.connect(socketPath);
@@ -242,7 +242,7 @@ interface IpcRequest {
 For calling Rust functions from TypeScript.
 
 ```typescript
-import { initRpcClient, rpcCall, closeRpcClient } from '@zapjs/runtime';
+import { initRpcClient, rpcCall, closeRpcClient } from '@zap-js/client';
 
 // Initialize
 initRpcClient('/tmp/zap.sock');
@@ -344,7 +344,7 @@ interface FileRouteConfig {
 
 ```typescript
 // src/server.ts
-import { Zap } from '@zapjs/runtime';
+import { Zap } from '@zap-js/client';
 
 const app = new Zap()
   .setPort(3000)
