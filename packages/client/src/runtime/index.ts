@@ -607,12 +607,28 @@ export const errors = {
 } as const;
 
 /**
- * Middleware namespace - middleware utilities
+ * Middleware namespace - route middleware utilities
  * Usage: import { middleware } from '@zap-js/client'
  */
+import {
+  composeMiddleware,
+  requireAuth,
+  requireRole,
+  routeLogger,
+  preloadData,
+  type MiddlewareContext,
+  type MiddlewareResult,
+  type MiddlewareFunction,
+  type RouteMiddleware,
+} from "./middleware.js";
+
 export const middleware = {
-  // Placeholder for future middleware utilities
-};
+  compose: composeMiddleware,
+  requireAuth,
+  requireRole,
+  logger: routeLogger,
+  preloadData,
+} as const;
 
 /**
  * Types namespace - type definitions and guards

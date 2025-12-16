@@ -29,7 +29,7 @@ import { router, websockets, streaming, middleware, errors, logger, types } from
 
 ### Server
 ```javascript
-import { rpc, ipc, types } from '@zap-js/server'
+import { rpc, types } from '@zap-js/server'
 ```
 
 ### File Routes
