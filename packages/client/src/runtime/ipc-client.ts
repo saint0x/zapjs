@@ -657,7 +657,40 @@ export class IpcClient extends EventEmitter {
     super();
     this.socketPath = socketPath;
     this.encoding = encoding;
-    this.connect();
+    // Don't connect immediately - wait for explicit ensureConnected() call
+  }
+
+  /**
+   * Ensure the client is connected. If not connected, attempt to connect.
+   * Returns a promise that resolves when connected.
+   */
+  async ensureConnected(): Promise<void> {
+    if (this.connected) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`Failed to connect to ${this.socketPath} after 5s`));
+      }, 5000);
+
+      this.connect();
+
+      const onConnect = () => {
+        clearTimeout(timeout);
+        this.removeListener('error', onError);
+        resolve();
+      };
+
+      const onError = (err: Error) => {
+        clearTimeout(timeout);
+        this.removeListener('connect', onConnect);
+        reject(err);
+      };
+
+      this.once('connect', onConnect);
+      this.once('error', onError);
+    });
   }
 
   /**

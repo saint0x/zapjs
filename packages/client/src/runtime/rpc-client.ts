@@ -29,7 +29,7 @@ export class RpcError extends Error {
 /**
  * Initialize the RPC client with a socket path
  */
-export function initRpcClient(socketPath: string): void {
+export async function initRpcClient(socketPath: string): Promise<void> {
   if (ipcClient) {
     throw new Error('RPC client already initialized');
   }
@@ -74,6 +74,24 @@ export function initRpcClient(socketPath: string): void {
     }
     pendingRequests.clear();
   });
+
+  // Wait for connection with retry logic
+  const maxRetries = 10;
+  const retryDelay = 500; // ms
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      await ipcClient.ensureConnected();
+      console.log(`[RPC] Client connected to ${socketPath}`);
+      return;
+    } catch (err) {
+      if (i === maxRetries - 1) {
+        throw new Error(`Failed to connect RPC client after ${maxRetries} attempts: ${err}`);
+      }
+      console.log(`[RPC] Waiting for server... (attempt ${i + 1}/${maxRetries})`);
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
+    }
+  }
 }
 
 /**
@@ -87,6 +105,9 @@ export async function rpcCall<T = unknown>(
   if (!ipcClient) {
     throw new Error('RPC client not initialized. Call initRpcClient() first.');
   }
+
+  // Ensure connection before sending
+  await ipcClient.ensureConnected();
 
   const requestId = `req_${Date.now()}_${requestCounter++}`;
 

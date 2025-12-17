@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import path from 'path';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
+import { promises as fs } from 'fs';
 import { FileWatcher, WatchEvent } from './watcher.js';
 import { RustBuilder, BuildResult } from './rust-builder.js';
 import { ViteProxy } from './vite-proxy.js';
@@ -364,6 +365,39 @@ export class DevServer extends EventEmitter {
   }
 
   /**
+   * Wait for Rust server to be ready by checking for .rpc socket file
+   */
+  private async waitForRustServer(): Promise<void> {
+    const rpcSocketPath = this.socketPath + '.rpc';
+    const maxWait = 10000; // 10 seconds
+    const checkInterval = 100; // 100ms
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWait) {
+      // Check if .rpc socket file exists
+      if (await this.fileExists(rpcSocketPath)) {
+        this.log('debug', `RPC socket ready: ${rpcSocketPath}`);
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, checkInterval));
+    }
+
+    throw new Error(`RPC server failed to start within ${maxWait}ms`);
+  }
+
+  /**
+   * Check if a file exists
+   */
+  private async fileExists(filePath: string): Promise<boolean> {
+    try {
+      await fs.access(filePath);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Scan routes directory and generate route tree
    */
   private async scanRoutes(): Promise<RouteTree | null> {
@@ -400,12 +434,7 @@ export class DevServer extends EventEmitter {
       await this.ipcServer.start();
       this.log('debug', `IPC server listening on ${this.socketPath}`);
 
-      // Initialize RPC client for bidirectional IPC communication
-      // This allows TypeScript route handlers to call Rust functions via rpc.call()
-      initRpcClient(this.socketPath);
-      this.log('debug', `RPC client initialized on ${this.socketPath}`);
-
-      // Load and register route handlers
+      // Load and register route handlers (before starting Rust)
       const routes = await this.loadRouteHandlers(routeTree);
       console.log(`[dev-server] Loaded ${routes.length} route configurations`);
 
@@ -423,6 +452,15 @@ export class DevServer extends EventEmitter {
 
       this.state.rustReady = true;
       cliLogger.succeedSpinner('rust-server', `Rust server ready on port ${this.config.rustPort}`);
+
+      // Wait for Rust RPC server to be ready
+      await this.waitForRustServer();
+
+      // Initialize RPC client for bidirectional IPC communication
+      // This allows TypeScript route handlers to call Rust functions via rpc.call()
+      this.log('debug', `Initializing RPC client on ${this.socketPath}.rpc`);
+      await initRpcClient(this.socketPath + '.rpc');
+      this.log('debug', `RPC client connected to ${this.socketPath}.rpc`);
     } catch (err) {
       cliLogger.failSpinner('rust-server', 'Failed to start Rust server');
       const message = err instanceof Error ? err.message : String(err);
