@@ -1,6 +1,6 @@
 {
   "name": "@zap-js/client",
-  "version": "0.0.9",
+  "version": "0.1.0",
   "description": "High-performance fullstack React framework - Client package",
   "homepage": "https://github.com/saint0x/zapjs",
   "repository": {
@@ -16,7 +16,24 @@
   "exports": {
     ".": {
       "types": "./index.d.ts",
-      "default": "./dist/runtime/index.js"
+      "node": "./dist/runtime/node.js",
+      "default": "./dist/runtime/browser.js"
+    },
+    "./node": {
+      "types": "./index.d.ts",
+      "default": "./dist/runtime/node.js"
+    },
+    "./server": {
+      "types": "./index.d.ts",
+      "default": "./dist/runtime/server.js"
+    },
+    "./browser": {
+      "types": "./index.d.ts",
+      "default": "./dist/runtime/browser.js"
+    },
+    "./client": {
+      "types": "./index.d.ts",
+      "default": "./dist/runtime/client.js"
     },
     "./router": "./dist/router/index.js"
   },
@@ -54,9 +71,9 @@
     "ws": "^8.16.0"
   },
   "optionalDependencies": {
-    "@zap-js/darwin-arm64": "0.0.9",
-    "@zap-js/darwin-x64": "0.0.9",
-    "@zap-js/linux-x64": "0.0.9"
+    "@zap-js/darwin-arm64": "0.1.0",
+    "@zap-js/darwin-x64": "0.1.0",
+    "@zap-js/linux-x64": "0.1.0"
   },
   "peerDependencies": {
     "react": "^18.0.0",

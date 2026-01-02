@@ -14,6 +14,16 @@ import type {
   ZapOptions,
 } from "./types.js";
 
+// DEPRECATION WARNING - Show in development only
+if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'production') {
+  console.warn(
+    '\x1b[33m[DEPRECATION]\x1b[0m Importing from @zap-js/client is deprecated.\n' +
+    'Use explicit imports:\n' +
+    '  - Server/Node.js: import { Zap } from "@zap-js/client/node"\n' +
+    '  - Browser/Client: import { router } from "@zap-js/client/browser"'
+  );
+}
+
 // Re-export types
 export type {
   Handler,

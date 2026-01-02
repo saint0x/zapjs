@@ -2,7 +2,7 @@ import { execSync } from 'child_process';
 import { join, resolve } from 'path';
 import { existsSync, mkdirSync, copyFileSync, readdirSync, statSync, rmSync, writeFileSync } from 'fs';
 import { cliLogger } from '../utils/logger.js';
-import { resolveBinary } from '../utils/binary-resolver.js';
+import { resolveBinary, getPlatformIdentifier } from '../utils/binary-resolver.js';
 
 export interface BuildOptions {
   release?: boolean;
@@ -95,7 +95,45 @@ async function buildRust(
   outputDir: string,
   options: BuildOptions
 ): Promise<void> {
-  cliLogger.spinner('rust', 'Building Rust backend (release mode)...');
+  const projectDir = process.cwd();
+
+  // STEP 1: Try to use pre-built binary from platform package
+  const prebuiltBinary = resolveBinary('zap', projectDir);
+
+  if (prebuiltBinary && existsSync(prebuiltBinary)) {
+    cliLogger.spinner('rust', 'Using pre-built binary...');
+    const platformId = getPlatformIdentifier();
+
+    try {
+      // Copy pre-built binary to output directory
+      const destBinary = join(outputDir, 'bin', 'zap');
+      copyFileSync(prebuiltBinary, destBinary);
+      execSync(`chmod +x "${destBinary}"`, { stdio: 'pipe' });
+
+      cliLogger.succeedSpinner('rust', `Using pre-built binary for ${platformId}`);
+      return;
+    } catch (error) {
+      cliLogger.failSpinner('rust', 'Failed to copy pre-built binary');
+      throw error;
+    }
+  }
+
+  // STEP 2: No pre-built binary found - check if we can build from source
+  const cargoTomlPath = join(projectDir, 'Cargo.toml');
+
+  if (!existsSync(cargoTomlPath)) {
+    cliLogger.failSpinner('rust', 'No binary available');
+    throw new Error(
+      'Cannot build: No pre-built binary found and no Cargo.toml to build from source.\n' +
+      '\n' +
+      'Solutions:\n' +
+      `1. Install platform package: npm install @zap-js/${getPlatformIdentifier()}\n` +
+      '2. Or build from source by cloning the ZapJS repository'
+    );
+  }
+
+  // STEP 3: Build from source with cargo
+  cliLogger.spinner('rust', 'Building Rust backend from source (release mode)...');
 
   const args = ['build', '--release', '--bin', 'zap'];
 
@@ -165,7 +203,7 @@ async function buildRust(
     copyFileSync(srcBinary, destBinary);
     execSync(`chmod +x "${destBinary}"`, { stdio: 'pipe' });
 
-    cliLogger.succeedSpinner('rust', 'Rust backend built (release + LTO)');
+    cliLogger.succeedSpinner('rust', 'Rust backend built from source (release + LTO)');
   } catch (error) {
     cliLogger.failSpinner('rust', 'Rust build failed');
     throw error;
