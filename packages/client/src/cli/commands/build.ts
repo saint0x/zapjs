@@ -3,6 +3,7 @@ import { join, resolve } from 'path';
 import { existsSync, mkdirSync, copyFileSync, readdirSync, statSync, rmSync, writeFileSync } from 'fs';
 import { cliLogger } from '../utils/logger.js';
 import { resolveBinary, getPlatformIdentifier } from '../utils/binary-resolver.js';
+import { validateBuildStructure } from '../utils/build-validator.js';
 
 export interface BuildOptions {
   release?: boolean;
@@ -38,6 +39,29 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     // Step 2: TypeScript type checking (optional but recommended)
     await typeCheck();
 
+    // Step 2.5: Validate build structure
+    cliLogger.spinner('validate', 'Validating build structure...');
+    const validation = validateBuildStructure(process.cwd());
+
+    if (!validation.valid) {
+      cliLogger.failSpinner('validate', 'Build validation failed');
+      for (const error of validation.errors) {
+        cliLogger.error(error);
+      }
+      cliLogger.newline();
+      cliLogger.error('Cannot use server-side imports in frontend code');
+      cliLogger.info('Server imports (@zap-js/server, @zap-js/client/node) should only be used in routes/api/ or routes/ws/');
+      throw new Error('Build validation failed');
+    }
+
+    if (validation.warnings.length > 0) {
+      for (const warning of validation.warnings) {
+        cliLogger.warn(warning);
+      }
+    }
+
+    cliLogger.succeedSpinner('validate', 'Build structure valid');
+
     // Clean output directory
     if (existsSync(outputDir)) {
       cliLogger.spinner('clean', 'Cleaning output directory...');
@@ -51,6 +75,9 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     if (!options.skipFrontend) {
       staticDir = await buildFrontend(outputDir);
     }
+
+    // Step 3.5: Compile server routes separately
+    await compileRoutes(outputDir);
 
     // Step 4: Create bin directory and build Rust binary
     // This happens AFTER frontend build so Vite doesn't overwrite it
@@ -223,7 +250,38 @@ async function buildFrontend(
 
   cliLogger.spinner('vite', 'Building frontend (Vite)...');
 
+  // Create temporary vite config that externalizes server packages
+  const tempConfigPath = join(process.cwd(), '.vite.config.temp.mjs');
+  const tempConfig = `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { fileURLToPath } from 'url';
+import path from 'path';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    rollupOptions: {
+      external: [
+        '@zap-js/server',
+        '@zap-js/client/node',
+        '@zap-js/client/server',
+      ],
+    }
+  },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src')
+    }
+  }
+});
+`;
+
   try {
+    // Write temporary config
+    writeFileSync(tempConfigPath, tempConfig);
+
     // Build to a temporary directory to avoid conflicts
     const tempDist = join(process.cwd(), '.dist-temp');
 
@@ -232,10 +290,13 @@ async function buildFrontend(
       rmSync(tempDist, { recursive: true, force: true });
     }
 
-    execSync(`npx vite build --outDir ${tempDist}`, {
+    execSync(`npx vite build --config ${tempConfigPath} --outDir ${tempDist}`, {
       cwd: process.cwd(),
       stdio: 'pipe',
     });
+
+    // Clean up temp config
+    rmSync(tempConfigPath, { force: true });
 
     const staticDir = join(outputDir, 'static');
 
@@ -250,9 +311,64 @@ async function buildFrontend(
       return null;
     }
   } catch (error) {
+    // Clean up temp config on error
+    if (existsSync(tempConfigPath)) {
+      rmSync(tempConfigPath, { force: true });
+    }
     cliLogger.failSpinner('vite', 'Frontend build failed');
     cliLogger.warn('Continuing without frontend');
     return null;
+  }
+}
+
+async function compileRoutes(outputDir: string): Promise<void> {
+  const routesDir = join(process.cwd(), 'routes');
+
+  if (!existsSync(routesDir)) {
+    cliLogger.info('No routes directory, skipping route compilation');
+    return;
+  }
+
+  cliLogger.spinner('routes', 'Compiling server routes...');
+
+  const tempTsConfig = '.tsconfig.routes.json';
+
+  try {
+    // Create temporary tsconfig for routes only
+    const routesTsConfig = {
+      extends: './tsconfig.json',
+      compilerOptions: {
+        outDir: join(outputDir, 'routes'),
+        rootDir: './routes',
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        noEmit: false,
+        declaration: false,
+        sourceMap: true,
+      },
+      include: ['routes/**/*.ts'],
+      exclude: ['routes/**/*.tsx', 'node_modules']
+    };
+
+    writeFileSync(tempTsConfig, JSON.stringify(routesTsConfig, null, 2));
+
+    execSync(`npx tsc --project ${tempTsConfig}`, {
+      cwd: process.cwd(),
+      stdio: 'pipe',
+    });
+
+    // Clean up temp config
+    rmSync(tempTsConfig, { force: true });
+
+    cliLogger.succeedSpinner('routes', 'Server routes compiled');
+  } catch (error) {
+    // Clean up temp config on error
+    if (existsSync(tempTsConfig)) {
+      rmSync(tempTsConfig, { force: true });
+    }
+    cliLogger.failSpinner('routes', 'Route compilation failed');
+    // Don't throw - routes may not exist or may not need compilation
+    cliLogger.warn('Continuing without compiled routes');
   }
 }
 

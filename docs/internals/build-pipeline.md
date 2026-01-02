@@ -164,25 +164,35 @@ zap build
 │                              zap build                                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  1. Clean Output Directory                                                  │
-│     └── rm -rf ./dist                                                       │
-│     └── mkdir -p ./dist/{bin,static}                                        │
+│  1. Run Codegen                                                             │
+│     └── zap-codegen --output ./src/generated                                │
 │                                                                             │
-│  2. Build Rust Binary                                                       │
+│  2. TypeScript Type Checking                                                │
+│     └── npx tsc --noEmit                                                    │
+│                                                                             │
+│  2.5. Validate Build Structure                                              │
+│     └── Check for illegal server imports in frontend code                   │
+│     └── Ensures @zap-js/server only in routes/api/ and routes/ws/          │
+│                                                                             │
+│  3. Clean Output Directory                                                  │
+│     └── rm -rf ./dist                                                       │
+│     └── mkdir -p ./dist/{bin,static,routes}                                 │
+│                                                                             │
+│  4. Build Frontend (Vite) - Browser Code Only                               │
+│     └── npx vite build --config .vite.config.temp.mjs                       │
+│     └── Externalizes: @zap-js/server, @zap-js/client/node                   │
+│     └── Output: dist/static/                                                │
+│                                                                             │
+│  4.5. Compile Server Routes (TypeScript Compiler)                           │
+│     └── npx tsc --project .tsconfig.routes.json                             │
+│     └── Compiles: routes/api/*.ts, routes/ws/*.ts                           │
+│     └── Target: NodeNext modules for Node.js runtime                        │
+│     └── Output: dist/routes/                                                │
+│                                                                             │
+│  5. Build Rust Binary                                                       │
 │     └── cargo build --release                                               │
 │     └── Profile: LTO=fat, codegen-units=1, panic=abort                      │
 │     └── Copy to: dist/bin/zap                                               │
-│                                                                             │
-│  3. Build Frontend (Vite)                                                   │
-│     └── npx vite build                                                      │
-│     └── Output: dist/static/                                                │
-│                                                                             │
-│  4. Run Codegen                                                             │
-│     └── zap-codegen --output ./src/generated                                │
-│                                                                             │
-│  5. Generate Route Manifest                                                 │
-│     └── Scan routes/ directory                                              │
-│     └── Write routeManifest.json                                            │
 │                                                                             │
 │  6. Create Server Config                                                    │
 │     └── Write dist/config.json                                              │
@@ -192,6 +202,33 @@ zap build
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Build Architecture
+
+ZapJS uses **separate build pipelines** for frontend and server code to prevent bundler contamination:
+
+### Frontend Pipeline (Vite)
+- **Input**: `src/`, `routes/*.tsx` (React components)
+- **Output**: `dist/static/`
+- **Bundler**: Vite with React plugin
+- **Target**: Browser (ES2020)
+- **Exclusions**: Automatically externalizes server-only packages
+
+### Server Pipeline (TypeScript Compiler)
+- **Input**: `routes/api/*.ts`, `routes/ws/*.ts`
+- **Output**: `dist/routes/`
+- **Compiler**: TypeScript (tsc)
+- **Target**: Node.js (NodeNext modules)
+- **Purpose**: API handlers and WebSocket routes
+
+### Important Rules
+
+1. **Never import** `@zap-js/server` in frontend code
+2. **Never import** `@zap-js/client/node` in frontend code
+3. API routes stay in `routes/api/` or `routes/ws/`
+4. Frontend components stay in `routes/*.tsx` or `src/`
+
+The build validator enforces these rules and will fail the build with clear error messages if violated.
 
 ### Rust Optimization
 
@@ -240,10 +277,17 @@ export default defineConfig({
 dist/
 ├── bin/
 │   └── zap                    # 4MB Rust binary
-├── static/
+├── routes/                    # Compiled server routes (NEW)
+│   ├── api/
+│   │   ├── hello.js
+│   │   ├── hello.js.map
+│   │   ├── users.$id.js
+│   │   └── users.$id.js.map
+│   └── ws/
+├── static/                    # Frontend bundle
 │   ├── index.html
 │   └── assets/
-│       ├── index-[hash].js    # App bundle
+│       ├── index-[hash].js    # App bundle (frontend only)
 │       ├── vendor-[hash].js   # Vendor chunk
 │       └── index-[hash].css   # Styles
 ├── config.json                # Server config

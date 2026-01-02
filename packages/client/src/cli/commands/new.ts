@@ -243,6 +243,7 @@ export const POST = async ({ request }: { request: Request }) => {
       '@types/react': '^18.0.0',
       '@types/react-dom': '^18.0.0',
       '@zapjs/cli': '^0.1.0',
+      '@vitejs/plugin-react': '^4.0.0',
       'typescript': '^5.0.0',
       'vite': '^5.0.0',
     },
@@ -299,6 +300,24 @@ export default defineConfig({
   };
 
   // Write files
+  // Create vite.config.ts
+  const viteConfig = `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    rollupOptions: {
+      external: [
+        '@zap-js/server',
+        '@zap-js/client/node',
+        '@zap-js/client/server',
+      ]
+    }
+  }
+});
+`;
+
   writeFileSync(join(projectDir, 'server/src/main.rs'), mainRs);
   writeFileSync(join(projectDir, 'routes/__root.tsx'), rootTsx);
   writeFileSync(join(projectDir, 'routes/index.tsx'), indexRoute);
@@ -308,6 +327,7 @@ export default defineConfig({
   writeFileSync(join(projectDir, 'Cargo.toml'), cargoToml);
   writeFileSync(join(projectDir, 'zap.config.ts'), zapConfig);
   writeFileSync(join(projectDir, 'tsconfig.json'), JSON.stringify(tsconfig, null, 2));
+  writeFileSync(join(projectDir, 'vite.config.ts'), viteConfig);
 
   // Create .gitignore
   const gitignore = `# Dependencies

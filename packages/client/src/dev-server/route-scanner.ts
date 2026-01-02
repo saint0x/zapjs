@@ -165,6 +165,33 @@ export class RouteScannerRunner extends EventEmitter {
   }
 
   /**
+   * Scan compiled routes from a production build (dist/routes/)
+   * Used when running production builds
+   */
+  async scanCompiledRoutes(distDir: string): Promise<RouteTree | null> {
+    const compiledRoutesDir = join(distDir, 'routes');
+
+    if (!existsSync(compiledRoutesDir)) {
+      return null;
+    }
+
+    try {
+      const router = await this.loadRouter();
+      if (!router) {
+        return null;
+      }
+
+      // Scan the compiled routes directory
+      const tree = router.scanRoutes(compiledRoutesDir);
+      this.emit('scan-complete', tree);
+      return tree;
+    } catch (err) {
+      this.emit('error', err);
+      return null;
+    }
+  }
+
+  /**
    * Check if routes directory exists
    */
   hasRoutesDir(): boolean {
