@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import { join, resolve } from 'path';
 import { existsSync, mkdirSync, copyFileSync, readdirSync, statSync, rmSync, writeFileSync } from 'fs';
 import { cliLogger } from '../utils/logger.js';
+import { resolveBinary } from '../utils/binary-resolver.js';
 
 export interface BuildOptions {
   release?: boolean;
@@ -241,24 +242,27 @@ async function typeCheck(): Promise<void> {
 async function runCodegen(): Promise<void> {
   const projectDir = process.cwd();
 
-  // Find codegen binary using same logic as codegen command
-  const possiblePaths = [
-    join(projectDir, 'bin', 'zap-codegen'),
-    join(projectDir, '../../target/release/zap-codegen'),
-    join(projectDir, '../../target/aarch64-apple-darwin/release/zap-codegen'),
-    join(projectDir, '../../target/x86_64-unknown-linux-gnu/release/zap-codegen'),
-    join(projectDir, 'target/release/zap-codegen'),
-  ];
+  // Try to resolve codegen binary using binary resolver
+  let codegenBinary = resolveBinary('zap-codegen', projectDir);
 
-  let codegenBinary: string | null = null;
-  for (const path of possiblePaths) {
-    if (existsSync(path)) {
-      codegenBinary = path;
-      break;
+  // If not found, try workspace target locations (for development)
+  if (!codegenBinary) {
+    const possiblePaths = [
+      join(projectDir, '../../target/release/zap-codegen'),
+      join(projectDir, '../../target/aarch64-apple-darwin/release/zap-codegen'),
+      join(projectDir, '../../target/x86_64-unknown-linux-gnu/release/zap-codegen'),
+      join(projectDir, 'target/release/zap-codegen'),
+    ];
+
+    for (const path of possiblePaths) {
+      if (existsSync(path)) {
+        codegenBinary = path;
+        break;
+      }
     }
   }
 
-  // Try global zap-codegen as fallback
+  // Try global zap-codegen as final fallback
   if (!codegenBinary) {
     try {
       execSync('which zap-codegen', { stdio: 'pipe' });

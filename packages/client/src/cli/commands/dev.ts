@@ -1,7 +1,7 @@
 import path from 'path';
-import { existsSync } from 'fs';
 import { DevServer, DevServerConfig } from '../../dev-server/index.js';
 import { cliLogger } from '../utils/logger.js';
+import { detectBinaries, getPlatformIdentifier } from '../utils/binary-resolver.js';
 
 export interface DevOptions {
   port?: string;
@@ -12,34 +12,6 @@ export interface DevOptions {
   skipBuild?: boolean;
   binaryPath?: string;
   codegenBinaryPath?: string;
-}
-
-/**
- * Auto-detect pre-built binaries in bin/ directory
- */
-function detectBinaries(projectDir: string): { binaryPath?: string; codegenBinaryPath?: string } {
-  const binDir = path.join(projectDir, 'bin');
-  const result: { binaryPath?: string; codegenBinaryPath?: string } = {};
-
-  // Check for zap binary
-  const zapBinary = path.join(binDir, 'zap');
-  const zapBinaryExe = path.join(binDir, 'zap.exe');
-  if (existsSync(zapBinary)) {
-    result.binaryPath = zapBinary;
-  } else if (existsSync(zapBinaryExe)) {
-    result.binaryPath = zapBinaryExe;
-  }
-
-  // Check for zap-codegen binary
-  const codegenBinary = path.join(binDir, 'zap-codegen');
-  const codegenBinaryExe = path.join(binDir, 'zap-codegen.exe');
-  if (existsSync(codegenBinary)) {
-    result.codegenBinaryPath = codegenBinary;
-  } else if (existsSync(codegenBinaryExe)) {
-    result.codegenBinaryPath = codegenBinaryExe;
-  }
-
-  return result;
 }
 
 /**
@@ -71,7 +43,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   // Log if using pre-built binaries
   if (config.binaryPath) {
-    cliLogger.info('Using pre-built binary', config.binaryPath);
+    const platformId = getPlatformIdentifier();
+    cliLogger.info(`Using pre-built binary for ${platformId}`, config.binaryPath);
   }
 
   const server = new DevServer(config);

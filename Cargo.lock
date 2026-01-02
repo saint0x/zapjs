@@ -2028,23 +2028,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zaptest"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "clap",
- "once_cell",
- "parking_lot",
- "regex",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "zap",
-]
-
-[[package]]
 name = "zerocopy"
 version = "0.8.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"

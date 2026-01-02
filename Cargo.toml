@@ -3,8 +3,7 @@ members = [
     "packages/server",
     "packages/server/internal/core",
     "packages/server/internal/macros",
-    "packages/server/internal/codegen",
-    "zaptest"
+    "packages/server/internal/codegen"
 ]
 resolver = "2"
 

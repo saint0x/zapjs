@@ -9,8 +9,9 @@
   ],
   "scripts": {
     "build": "cargo build --release --workspace",
+    "build:binaries": "node scripts/build-binaries.js",
     "test": "cargo test --workspace",
-    "clean": "rm -rf target packages/*/dist packages/*/internal/*/dist",
+    "clean": "rm -rf target packages/*/dist packages/*/internal/*/dist packages/platforms/*/bin",
     "format": "prettier --write 'packages/**/*.{js,json}'"
   },
   "keywords": [

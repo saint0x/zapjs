@@ -9,24 +9,30 @@
 //! - Proper resource cleanup
 //!
 //! ## Usage
-//! ```rust
+//! ```no_run
 //! use zap_server::shutdown::{GracefulShutdown, ShutdownConfig};
 //!
-//! let shutdown = GracefulShutdown::new(ShutdownConfig::default());
+//! #[tokio::main]
+//! async fn main() {
+//!     let shutdown = GracefulShutdown::new(ShutdownConfig::default());
+//!     let listener = tokio::net::TcpListener::bind("127.0.0.1:3000").await.unwrap();
 //!
-//! // In server loop
-//! tokio::select! {
-//!     _ = shutdown.wait() => {
-//!         println!("Shutdown signal received");
-//!         break;
+//!     // In server loop
+//!     loop {
+//!         tokio::select! {
+//!             _ = shutdown.wait() => {
+//!                 println!("Shutdown signal received");
+//!                 break;
+//!             }
+//!             result = listener.accept() => {
+//!                 // Handle connection
+//!             }
+//!         }
 //!     }
-//!     result = listener.accept() => {
-//!         // Handle connection
-//!     }
+//!
+//!     // Drain in-flight requests
+//!     shutdown.drain_connections().await;
 //! }
-//!
-//! // Drain in-flight requests
-//! shutdown.drain_connections().await;
 //! ```
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};

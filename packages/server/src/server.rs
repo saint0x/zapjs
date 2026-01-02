@@ -355,22 +355,61 @@ impl Zap {
         })
     }
 
+    /// Try to bind to a port, cascading through a range if the initial port is in use
+    async fn try_bind_with_cascade(hostname: &str, port: u16, max_attempts: u16) -> Result<(TcpListener, u16), ZapError> {
+        let mut current_port = port;
+        let mut last_error = None;
+
+        for attempt in 0..max_attempts {
+            let addr = format!("{}:{}", hostname, current_port);
+            let socket_addr: SocketAddr = addr.parse().map_err(|e| {
+                ZapError::http(format!("Invalid address '{}': {}", addr, e))
+            })?;
+
+            match TcpListener::bind(socket_addr).await {
+                Ok(listener) => {
+                    if attempt > 0 {
+                        info!("⚠️  Port {} was in use, bound to port {} instead", port, current_port);
+                    }
+                    return Ok((listener, current_port));
+                }
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::AddrInUse {
+                        debug!("Port {} in use, trying next port...", current_port);
+                        last_error = Some(e);
+                        current_port += 1;
+                    } else {
+                        return Err(ZapError::from(e));
+                    }
+                }
+            }
+        }
+
+        Err(ZapError::from(last_error.unwrap_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::AddrInUse,
+                format!("Could not bind to any port in range {}-{}", port, port + max_attempts - 1)
+            )
+        })))
+    }
+
     /// Start the server and listen for connections with graceful shutdown support
     ///
     /// This method enables:
     /// - SIGTERM/SIGINT signal handling
     /// - Graceful connection draining
     /// - Proper resource cleanup
+    /// - Port cascading (tries next port if initial port is in use)
     ///
     /// For production use, prefer this over `listen()`.
     pub async fn listen_with_shutdown(self, shutdown_config: ShutdownConfig) -> Result<(), ZapError> {
-        let addr = self.config.socket_addr();
-        let socket_addr: SocketAddr = addr.parse().map_err(|e| {
-            ZapError::http(format!("Invalid address '{}': {}", addr, e))
-        })?;
+        let initial_port = self.config.port;
+        let hostname = self.config.hostname.clone();
 
-        let listener = TcpListener::bind(socket_addr).await?;
+        // Try to bind with port cascading (attempt up to 10 ports)
+        let (listener, actual_port) = Self::try_bind_with_cascade(&hostname, initial_port, 10).await?;
 
+        let addr = format!("{}:{}", hostname, actual_port);
         info!("🚀 Zap server listening on http://{}", addr);
         info!("📊 Router contains {} routes", self.router.total_routes());
         info!("🛡️  Graceful shutdown enabled (drain timeout: {:?})", shutdown_config.drain_timeout);
