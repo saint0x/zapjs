@@ -34,8 +34,8 @@ pub async fn async_divide(a: f64, b: f64) -> Result<f64, String> {
     }
 }
 
-#[test]
-fn test_registry_builds() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_registry_builds() {
     // Simply building the dispatcher should collect all registered functions
     let dispatcher = zap_server::build_rpc_dispatcher();
 
@@ -48,8 +48,8 @@ fn test_registry_builds() {
     assert_eq!(result.unwrap(), json!("test_data_123"));
 }
 
-#[test]
-fn test_async_function() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_async_function() {
     let dispatcher = zap_server::build_rpc_dispatcher();
 
     // Test async function call
@@ -61,8 +61,8 @@ fn test_async_function() {
     assert_eq!(result.unwrap(), json!("Hello, World!"));
 }
 
-#[test]
-fn test_result_success() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_result_success() {
     let dispatcher = zap_server::build_rpc_dispatcher();
 
     // Test successful division
@@ -74,8 +74,8 @@ fn test_result_success() {
     assert_eq!(result.unwrap(), json!(5.0));
 }
 
-#[test]
-fn test_result_error() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_result_error() {
     let dispatcher = zap_server::build_rpc_dispatcher();
 
     // Test division by zero error
@@ -88,8 +88,8 @@ fn test_result_error() {
     assert!(error_msg.contains("Division by zero"), "Error should mention division by zero");
 }
 
-#[test]
-fn test_async_result_success() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_async_result_success() {
     let dispatcher = zap_server::build_rpc_dispatcher();
 
     // Test successful async division
@@ -101,8 +101,8 @@ fn test_async_result_success() {
     assert_eq!(result.unwrap(), json!(5.0));
 }
 
-#[test]
-fn test_unknown_function() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_unknown_function() {
     let dispatcher = zap_server::build_rpc_dispatcher();
 
     // Test calling unknown function
@@ -115,8 +115,8 @@ fn test_unknown_function() {
     assert!(error_msg.contains("not implemented"), "Error should mention function not implemented");
 }
 
-#[test]
-fn test_missing_parameter() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_missing_parameter() {
     let dispatcher = zap_server::build_rpc_dispatcher();
 
     // Test calling function with missing parameter
@@ -129,8 +129,8 @@ fn test_missing_parameter() {
     assert!(error_msg.contains("Missing parameter"), "Error should mention missing parameter");
 }
 
-#[test]
-fn test_wrong_parameter_type() {
+#[tokio::test(flavor = "multi_thread")]
+async fn test_wrong_parameter_type() {
     let dispatcher = zap_server::build_rpc_dispatcher();
 
     // Test calling function with wrong parameter type
@@ -141,4 +141,27 @@ fn test_wrong_parameter_type() {
     assert!(result.is_err(), "wrong parameter type should fail");
     let error_msg = result.unwrap_err();
     assert!(error_msg.contains("deserialize"), "Error should mention deserialization failure");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_non_object_params() {
+    let dispatcher = zap_server::build_rpc_dispatcher();
+
+    // Test calling function with array params
+    let result = dispatcher(
+        "get_test_data".to_string(),
+        json!([123]) // array instead of object
+    );
+    assert!(result.is_err(), "non-object params should fail");
+    let error_msg = result.unwrap_err();
+    assert!(error_msg.contains("must be an object"), "Error should mention params must be object");
+
+    // Test calling function with string params
+    let result = dispatcher(
+        "get_test_data".to_string(),
+        json!("test") // string instead of object
+    );
+    assert!(result.is_err(), "string params should fail");
+    let error_msg = result.unwrap_err();
+    assert!(error_msg.contains("must be an object"), "Error should mention params must be object");
 }

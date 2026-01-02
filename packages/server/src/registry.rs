@@ -46,6 +46,18 @@ pub struct ExportedFunction {
 // Inventory collection point - collects all ExportedFunction instances at compile time
 inventory::collect!(ExportedFunction);
 
+// Lazy static runtime for fallback cases (testing, etc.)
+lazy_static::lazy_static! {
+    static ref FALLBACK_RUNTIME: tokio::runtime::Runtime = {
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("zap-rpc-fallback")
+            .enable_all()
+            .build()
+            .expect("Failed to create fallback Tokio runtime")
+    };
+}
+
 /// Build RPC dispatcher from all registered functions
 ///
 /// This function iterates through all functions registered via the `#[zap::export]` macro
@@ -53,6 +65,11 @@ inventory::collect!(ExportedFunction);
 ///
 /// # Returns
 /// An `RpcDispatchFn` that can be used with the RPC server
+///
+/// # Important
+/// The dispatcher uses `tokio::task::block_in_place` when called from within an async context
+/// to avoid blocking the async executor. For test contexts without a runtime, it uses a
+/// lazy-initialized fallback runtime.
 ///
 /// # Example
 /// ```no_run
@@ -77,19 +94,36 @@ pub fn build_rpc_dispatcher() -> crate::rpc::RpcDispatchFn {
         // Convert params to HashMap for wrapper functions
         let params_map: HashMap<String, Value> = match params {
             Value::Object(map) => map.into_iter().collect(),
-            _ => HashMap::new(),
+            Value::Null => HashMap::new(), // Allow null params (no parameters)
+            _ => {
+                return Err(format!(
+                    "RPC params must be an object, got: {}",
+                    match params {
+                        Value::Array(_) => "array",
+                        Value::String(_) => "string",
+                        Value::Number(_) => "number",
+                        Value::Bool(_) => "boolean",
+                        _ => "unknown"
+                    }
+                ))
+            }
         };
 
         match registry.get(&function_name) {
             Some(func) => {
-                // Try to use current runtime if available, otherwise create one
+                // Check if we're in an async context
                 match tokio::runtime::Handle::try_current() {
-                    Ok(handle) => handle.block_on(func.wrapper.call(&params_map)),
+                    Ok(handle) => {
+                        // We're in an async context - use block_in_place to avoid blocking the executor
+                        // This moves the blocking work to a dedicated blocking thread
+                        tokio::task::block_in_place(|| {
+                            handle.block_on(func.wrapper.call(&params_map))
+                        })
+                    }
                     Err(_) => {
-                        // No runtime available, create a temporary one
-                        let runtime = tokio::runtime::Runtime::new()
-                            .map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
-                        runtime.block_on(func.wrapper.call(&params_map))
+                        // No runtime available - use fallback runtime
+                        // This handles test scenarios and standalone dispatcher usage
+                        FALLBACK_RUNTIME.block_on(func.wrapper.call(&params_map))
                     }
                 }
             }

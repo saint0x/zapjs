@@ -272,8 +272,12 @@ fn generate_registration(metadata: &FunctionMetadata) -> proc_macro2::TokenStrea
                     is_async: true,
                     wrapper: ::zap_server::__private::FunctionWrapper::Async(
                         |params| {
-                            let params = params.clone();
-                            ::std::boxed::Box::pin(async move { #wrapper_name(&params).await })
+                            // Clone params to move into the async block
+                            // This is necessary because the closure signature requires 'static lifetime
+                            let params_owned = params.clone();
+                            ::std::boxed::Box::pin(async move {
+                                #wrapper_name(&params_owned).await
+                            })
                         }
                     ),
                 }
