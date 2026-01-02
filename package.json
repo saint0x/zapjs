@@ -1,6 +1,6 @@
 {
   "name": "zapjs",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "High-performance fullstack React framework powered by Rust",
   "workspaces": [
