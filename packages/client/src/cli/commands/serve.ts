@@ -118,6 +118,25 @@ export async function serveCommand(options: ServeOptions): Promise<void> {
   }
 }
 
+/**
+ * Wait for Rust server to create RPC socket file
+ */
+async function waitForRpcSocket(socketPath: string): Promise<void> {
+  const rpcSocketPath = socketPath + '.rpc';
+  const maxWait = 10000; // 10 seconds
+  const checkInterval = 100; // 100ms
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < maxWait) {
+    if (existsSync(rpcSocketPath)) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, checkInterval));
+  }
+
+  throw new Error(`RPC socket not ready within ${maxWait}ms`);
+}
+
 async function runProductionServer(
   binPath: string,
   options: ServeOptions,
@@ -146,13 +165,6 @@ async function runProductionServer(
   const ipcServer = new IpcServer(socketPath);
   await ipcServer.start();
   cliLogger.succeedSpinner('ipc', 'IPC server started');
-
-  // Initialize RPC client for bidirectional IPC communication
-  // This allows TypeScript route handlers to call Rust functions via rpc.call()
-  cliLogger.spinner('rpc', 'Initializing RPC client...');
-  const { initRpcClient } = await import('../../runtime/rpc-client.js');
-  await initRpcClient(socketPath + '.rpc');
-  cliLogger.succeedSpinner('rpc', 'RPC client initialized');
 
   // Load and register route handlers
   const routes = await loadRouteHandlers(ipcServer, workDir);
@@ -206,6 +218,27 @@ async function runProductionServer(
       ZAP_ENV: 'production',
     },
   });
+
+  // Wait for Rust server to create RPC socket, then initialize RPC client
+  cliLogger.spinner('rpc', 'Waiting for RPC server...');
+  try {
+    await waitForRpcSocket(socketPath);
+
+    // Initialize RPC client for bidirectional IPC communication
+    // This allows TypeScript route handlers to call Rust functions via rpc.call()
+    const { initRpcClient } = await import('../../runtime/rpc-client.js');
+    await initRpcClient(socketPath + '.rpc');
+    cliLogger.succeedSpinner('rpc', 'RPC client connected');
+  } catch (err) {
+    cliLogger.failSpinner('rpc', 'Failed to connect RPC client');
+    const message = err instanceof Error ? err.message : String(err);
+    cliLogger.error(message);
+    cleanup(ipcServer, tempConfigPath);
+    if (!rustProcess.killed) {
+      rustProcess.kill();
+    }
+    process.exit(1);
+  }
 
   let started = false;
 
