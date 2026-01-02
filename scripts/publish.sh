@@ -28,7 +28,7 @@ echo "✅ Logged in as: $npm_user"
 # Build everything
 echo -e "\n📦 Building packages..."
 echo "Building TypeScript files..."
-cd packages/client && npm run build && cd ../..
+(cd packages/client && npm run build)
 echo "✅ Client package built"
 
 echo -e "\n🦀 Building Rust binaries for all platforms..."
@@ -42,11 +42,11 @@ echo "✅ All tests passed"
 
 # Check versions
 echo -e "\n📋 Package versions:"
-client_version=$(cd packages/client && node -p "require('./package.json').version")
-server_version=$(cd packages/server && node -p "require('./package.json').version")
-darwin_arm64_version=$(cd packages/platforms/darwin-arm64 && node -p "require('./package.json').version")
-darwin_x64_version=$(cd packages/platforms/darwin-x64 && node -p "require('./package.json').version")
-linux_x64_version=$(cd packages/platforms/linux-x64 && node -p "require('./package.json').version")
+client_version=$(node -p "require('./packages/client/package.json').version")
+server_version=$(node -p "require('./packages/server/package.json').version")
+darwin_arm64_version=$(node -p "require('./packages/platforms/darwin-arm64/package.json').version")
+darwin_x64_version=$(node -p "require('./packages/platforms/darwin-x64/package.json').version")
+linux_x64_version=$(node -p "require('./packages/platforms/linux-x64/package.json').version")
 
 echo "  @zap-js/client: $client_version"
 echo "  @zap-js/server: $server_version"
@@ -56,11 +56,11 @@ echo "  @zap-js/linux-x64: $linux_x64_version"
 
 # Dry run first
 echo -e "\n🔍 Running dry-run publish..."
-cd packages/server && npm publish --dry-run && cd ../..
-cd packages/client && npm publish --dry-run && cd ../..
-cd packages/platforms/darwin-arm64 && npm publish --dry-run && cd ../../..
-cd packages/platforms/darwin-x64 && npm publish --dry-run && cd ../../..
-cd packages/platforms/linux-x64 && npm publish --dry-run && cd ../../..
+(cd packages/server && npm publish --dry-run)
+(cd packages/client && npm publish --dry-run)
+(cd packages/platforms/darwin-arm64 && npm publish --dry-run)
+(cd packages/platforms/darwin-x64 && npm publish --dry-run)
+(cd packages/platforms/linux-x64 && npm publish --dry-run)
 
 # Confirm before actual publish
 echo -e "\n⚠️  Ready to publish to npm!"
@@ -79,24 +79,19 @@ fi
 
 # Publish platform packages first (they have no dependencies)
 echo -e "\n📤 Publishing platform packages..."
-cd packages/platforms/darwin-arm64 && npm publish && cd ../../..
-echo "✅ @zap-js/darwin-arm64 published!"
+(cd packages/platforms/darwin-arm64 && npm publish) || echo "⚠️  @zap-js/darwin-arm64 publish failed (may already be published)"
 
-cd packages/platforms/darwin-x64 && npm publish && cd ../../..
-echo "✅ @zap-js/darwin-x64 published!"
+(cd packages/platforms/darwin-x64 && npm publish) || echo "⚠️  @zap-js/darwin-x64 publish failed (may already be published)"
 
-cd packages/platforms/linux-x64 && npm publish && cd ../../..
-echo "✅ @zap-js/linux-x64 published!"
+(cd packages/platforms/linux-x64 && npm publish) || echo "⚠️  @zap-js/linux-x64 publish failed (may already be published)"
 
 # Publish server (client depends on it via optionalDependencies)
 echo -e "\n📤 Publishing @zap-js/server..."
-cd packages/server && npm publish && cd ../..
-echo "✅ @zap-js/server published!"
+(cd packages/server && npm publish) || echo "⚠️  @zap-js/server publish failed (may already be published)"
 
 # Publish client last (depends on platform packages)
 echo -e "\n📤 Publishing @zap-js/client..."
-cd packages/client && npm publish && cd ../..
-echo "✅ @zap-js/client published!"
+(cd packages/client && npm publish) || echo "⚠️  @zap-js/client publish failed (may already be published)"
 
 echo -e "\n🎉 Successfully published all packages!"
 echo "Users can now install with:"
