@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'fs';
 import { join } from 'path';
+import { parse } from '@babel/parser';
+import traverse from '@babel/traverse';
 
 const SERVER_ONLY_IMPORTS = [
   '@zap-js/server',
@@ -42,29 +44,52 @@ export function validateNoServerImportsInFrontend(srcDir: string): string[] {
       if (pattern.test(filePath)) return;
     }
 
-    // Now scan file for server imports
+    // Now scan file for server imports using AST parsing
     try {
       const content = readFileSync(filePath, 'utf-8');
       let serverImportFound: string | null = null;
 
-      for (const serverImport of SERVER_ONLY_IMPORTS) {
-        // Check for both single and double quotes
-        const patterns = [
-          `from '${serverImport}'`,
-          `from "${serverImport}"`,
-          `require('${serverImport}')`,
-          `require("${serverImport}")`,
-        ];
+      // Parse file to AST
+      const ast = parse(content, {
+        sourceType: 'module',
+        plugins: ['typescript', 'jsx'],
+        errorRecovery: true,
+      });
 
-        for (const pattern of patterns) {
-          if (content.includes(pattern)) {
-            serverImportFound = serverImport;
-            break;
+      // Traverse AST to find actual import declarations
+      traverse(ast, {
+        ImportDeclaration(path) {
+          const importSource = path.node.source.value;
+
+          // Check if this is a server-only import
+          for (const serverImport of SERVER_ONLY_IMPORTS) {
+            if (importSource === serverImport || importSource.startsWith(serverImport + '/')) {
+              serverImportFound = serverImport;
+              path.stop(); // Stop traversal once we find one
+              return;
+            }
           }
-        }
+        },
+        CallExpression(path) {
+          // Also check for require() calls
+          if (
+            path.node.callee.type === 'Identifier' &&
+            path.node.callee.name === 'require' &&
+            path.node.arguments.length > 0 &&
+            path.node.arguments[0].type === 'StringLiteral'
+          ) {
+            const requireSource = path.node.arguments[0].value;
 
-        if (serverImportFound) break; // Only report once per file
-      }
+            for (const serverImport of SERVER_ONLY_IMPORTS) {
+              if (requireSource === serverImport || requireSource.startsWith(serverImport + '/')) {
+                serverImportFound = serverImport;
+                path.stop();
+                return;
+              }
+            }
+          }
+        },
+      });
 
       // Tier 4: Classify and report errors
       if (serverImportFound) {
@@ -84,7 +109,7 @@ export function validateNoServerImportsInFrontend(srcDir: string): string[] {
         }
       }
     } catch (err) {
-      // Ignore files that can't be read
+      // Ignore files that can't be parsed or read
     }
   }
 

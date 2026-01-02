@@ -147,6 +147,13 @@ async function runProductionServer(
   await ipcServer.start();
   cliLogger.succeedSpinner('ipc', 'IPC server started');
 
+  // Initialize RPC client for bidirectional IPC communication
+  // This allows TypeScript route handlers to call Rust functions via rpc.call()
+  cliLogger.spinner('rpc', 'Initializing RPC client...');
+  const { initRpcClient } = await import('../../runtime/rpc-client.js');
+  await initRpcClient(socketPath + '.rpc');
+  cliLogger.succeedSpinner('rpc', 'RPC client initialized');
+
   // Load and register route handlers
   const routes = await loadRouteHandlers(ipcServer, workDir);
 
