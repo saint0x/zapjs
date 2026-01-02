@@ -73,6 +73,8 @@ lazy_static::lazy_static! {
 ///
 /// # Example
 /// ```no_run
+/// use zap_server::build_rpc_dispatcher;
+///
 /// let dispatcher = build_rpc_dispatcher();
 /// // Use with RpcServerHandle::new()
 /// ```
