@@ -49,8 +49,16 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
         cliLogger.error(error);
       }
       cliLogger.newline();
-      cliLogger.error('Cannot use server-side imports in frontend code');
-      cliLogger.info('Server imports (@zap-js/server, @zap-js/client/node) should only be used in routes/api/ or routes/ws/');
+      cliLogger.error('Server imports found in restricted locations');
+      cliLogger.newline();
+      cliLogger.info('Allowed locations for server imports:');
+      cliLogger.info('  - routes/api/** (server-side routes)');
+      cliLogger.info('  - routes/ws/** (WebSocket routes)');
+      cliLogger.info('  - src/api/** (API clients)');
+      cliLogger.info('  - src/services/** (business logic)');
+      cliLogger.info('  - src/generated/** (generated code)');
+      cliLogger.newline();
+      cliLogger.info('Move server imports to allowed directories or remove them.');
       throw new Error('Build validation failed');
     }
 

@@ -7,6 +7,12 @@ const SERVER_ONLY_IMPORTS = [
   '@zap-js/client/server',
 ];
 
+// Path classification tiers
+const ALWAYS_ALLOWED = ['/routes/api/', '/routes/ws/'];
+const BUSINESS_LOGIC_ALLOWED = ['/src/api/', '/src/services/', '/src/generated/', '/src/lib/api/'];
+const UI_LAYER_BLOCKED = ['/src/components/', '/src/pages/', '/src/ui/'];
+const ALLOWED_FILE_PATTERNS = [/\/rpc-client\.(ts|js)$/, /\/api-client\.(ts|js)$/];
+
 /**
  * Validates that frontend code doesn't import server-only packages
  * Returns array of error messages (empty if valid)
@@ -18,15 +24,28 @@ export function validateNoServerImportsInFrontend(srcDir: string): string[] {
     // Only scan TypeScript/JavaScript files
     if (!filePath.match(/\.(tsx?|jsx?)$/)) return;
 
-    // Skip API routes (these are server-side)
-    if (filePath.includes('/routes/api/')) return;
-    if (filePath.includes('/routes/ws/')) return;
-
     // Skip node_modules
     if (filePath.includes('node_modules')) return;
 
+    // Tier 1: Check server-side paths first (early exit)
+    for (const allowed of ALWAYS_ALLOWED) {
+      if (filePath.includes(allowed)) return;
+    }
+
+    // Tier 2: Check business logic paths
+    for (const allowed of BUSINESS_LOGIC_ALLOWED) {
+      if (filePath.includes(allowed)) return;
+    }
+
+    // Tier 3: Check special file patterns
+    for (const pattern of ALLOWED_FILE_PATTERNS) {
+      if (pattern.test(filePath)) return;
+    }
+
+    // Now scan file for server imports
     try {
       const content = readFileSync(filePath, 'utf-8');
+      let serverImportFound: string | null = null;
 
       for (const serverImport of SERVER_ONLY_IMPORTS) {
         // Check for both single and double quotes
@@ -39,11 +58,29 @@ export function validateNoServerImportsInFrontend(srcDir: string): string[] {
 
         for (const pattern of patterns) {
           if (content.includes(pattern)) {
-            errors.push(
-              `${filePath}: Illegal server import '${serverImport}' in frontend code`
-            );
-            break; // Only report once per file
+            serverImportFound = serverImport;
+            break;
           }
+        }
+
+        if (serverImportFound) break; // Only report once per file
+      }
+
+      // Tier 4: Classify and report errors
+      if (serverImportFound) {
+        // Check if in UI layer (explicit block)
+        let inUILayer = false;
+        for (const blocked of UI_LAYER_BLOCKED) {
+          if (filePath.includes(blocked)) {
+            inUILayer = true;
+            break;
+          }
+        }
+
+        if (inUILayer) {
+          errors.push(`${filePath}: Server import '${serverImportFound}' in UI layer`);
+        } else {
+          errors.push(`${filePath}: Server import '${serverImportFound}' in unclassified path`);
         }
       }
     } catch (err) {
