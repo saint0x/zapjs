@@ -1,3 +1,4 @@
+use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use syn::{Attribute, Fields, FnArg, ItemFn, ItemStruct, Pat, ReturnType, Type, Visibility};
@@ -876,6 +877,125 @@ pub fn find_exported_functions(project_dir: &Path) -> anyhow::Result<Vec<Exporte
     }
 
     Ok(functions)
+}
+
+/// Convert Splice ExportMetadata to ExportedFunction
+pub fn convert_splice_exports_to_exported_functions(
+    exports: Vec<splice::ExportMetadata>,
+) -> anyhow::Result<Vec<ExportedFunction>> {
+    let mut functions = Vec::new();
+
+    for export in exports {
+        // Parse JSON Schema strings
+        let params_schema: serde_json::Value = serde_json::from_str(&export.params_schema)
+            .with_context(|| format!("Invalid params_schema for {}", export.name))?;
+        let return_schema: serde_json::Value = serde_json::from_str(&export.return_schema)
+            .with_context(|| format!("Invalid return_schema for {}", export.name))?;
+
+        // Convert to ExportedParam and ExportedType
+        let params = parse_params_from_schema(&params_schema)?;
+        let return_type = parse_type_from_schema(&return_schema)?;
+
+        // Extract namespace from function name (e.g., "users.get" → namespace: "users")
+        let (namespace, name) = if export.name.contains('.') {
+            let parts: Vec<&str> = export.name.splitn(2, '.').collect();
+            (Some(parts[0].to_string()), parts[1].to_string())
+        } else {
+            (None, export.name)
+        };
+
+        functions.push(ExportedFunction {
+            name,
+            namespace,
+            is_async: export.is_async,
+            params,
+            return_type,
+            doc_comments: vec![],
+        });
+    }
+
+    Ok(functions)
+}
+
+fn parse_params_from_schema(schema: &serde_json::Value) -> anyhow::Result<Vec<ExportedParam>> {
+    // Expect: {"type": "object", "properties": {"param1": {...}, "param2": {...}}}
+    let properties = schema
+        .get("properties")
+        .and_then(|p| p.as_object())
+        .ok_or_else(|| anyhow::anyhow!("Schema missing 'properties' object"))?;
+
+    let mut params = Vec::new();
+    for (param_name, param_schema) in properties {
+        let param_type = parse_type_from_schema(param_schema)?;
+        params.push(ExportedParam {
+            name: param_name.clone(),
+            ty: param_type,
+        });
+    }
+
+    Ok(params)
+}
+
+fn parse_type_from_schema(schema: &serde_json::Value) -> anyhow::Result<ExportedType> {
+    use serde_json::Value;
+
+    // Handle JSON Schema type field
+    match schema.get("type").and_then(|t| t.as_str()) {
+        Some("string") => Ok(ExportedType::String),
+        Some("boolean") => Ok(ExportedType::Bool),
+        Some("integer") => Ok(ExportedType::I64),
+        Some("number") => Ok(ExportedType::F64),
+        Some("null") => Ok(ExportedType::Unit),
+        Some("array") => {
+            let items = schema
+                .get("items")
+                .ok_or_else(|| anyhow::anyhow!("Array schema missing 'items'"))?;
+            let inner = parse_type_from_schema(items)?;
+            Ok(ExportedType::Vec(Box::new(inner)))
+        }
+        Some("object") => {
+            // Check for additionalProperties (HashMap) or named properties (Custom struct)
+            if let Some(additional) = schema.get("additionalProperties") {
+                // HashMap-like object
+                let key = ExportedType::String; // JSON keys are always strings
+                let value = parse_type_from_schema(additional)?;
+                Ok(ExportedType::HashMap {
+                    key: Box::new(key),
+                    value: Box::new(value),
+                })
+            } else {
+                // Custom struct - use generic "object" type
+                Ok(ExportedType::Custom {
+                    name: "object".to_string(),
+                    generics: vec![],
+                })
+            }
+        }
+        None => {
+            // Handle anyOf for Option types: {"anyOf": [{"type": "string"}, {"type": "null"}]}
+            if let Some(any_of) = schema.get("anyOf").and_then(|a| a.as_array()) {
+                let mut types: Vec<ExportedType> = any_of
+                    .iter()
+                    .filter_map(|s| parse_type_from_schema(s).ok())
+                    .collect();
+
+                // If one of the types is Unit (null), it's an Option<T>
+                if types.contains(&ExportedType::Unit) {
+                    types.retain(|t| *t != ExportedType::Unit);
+                    if types.len() == 1 {
+                        return Ok(ExportedType::Option(Box::new(types.remove(0))));
+                    }
+                }
+            }
+
+            // Fallback for unknown types
+            Ok(ExportedType::Custom {
+                name: "unknown".to_string(),
+                generics: vec![],
+            })
+        }
+        Some(unknown) => Err(anyhow::anyhow!("Unknown JSON Schema type: {}", unknown)),
+    }
 }
 
 #[cfg(test)]

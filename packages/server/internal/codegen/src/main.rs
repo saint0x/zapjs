@@ -4,7 +4,13 @@ use std::path::PathBuf;
 use zap_codegen::{
     find_exported_functions, find_exported_structs, generate_namespaced_server,
     generate_typescript_definitions, generate_typescript_interfaces, generate_typescript_runtime,
+    ExportedFunction,
 };
+use anyhow::{Context as _, Result};
+use tokio::net::UnixStream;
+use tokio_util::codec::Framed;
+use futures::StreamExt;
+use splice::{Message, Role, SpliceCodec, PROTOCOL_VERSION, DEFAULT_MAX_FRAME_SIZE};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -24,6 +30,10 @@ struct Args {
     #[arg(short, long)]
     input: Option<PathBuf>,
 
+    /// Connect to Splice socket to query exports at runtime
+    #[arg(long)]
+    splice_socket: Option<PathBuf>,
+
     /// Generate type definitions (.d.ts)
     #[arg(long, default_value_t = true)]
     definitions: bool,
@@ -37,14 +47,18 @@ struct Args {
     server: bool,
 }
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     // Create output directory if it doesn't exist
     fs::create_dir_all(&args.output_dir)?;
 
-    // Load exported functions from input file or scan Rust source
-    let functions = if let Some(input_path) = args.input {
+    // Load exported functions from Splice socket, input file, or scan Rust source
+    let functions = if let Some(socket_path) = args.splice_socket {
+        println!("Connecting to Splice at {}...", socket_path.display());
+        load_exports_from_splice(&socket_path).await?
+    } else if let Some(input_path) = args.input {
         let json_content = fs::read_to_string(&input_path)?;
         serde_json::from_str(&json_content)?
     } else {
@@ -91,6 +105,53 @@ fn main() -> anyhow::Result<()> {
 
     println!("Successfully generated TypeScript bindings for {} functions and {} types", functions.len(), structs.len());
     Ok(())
+}
+
+async fn load_exports_from_splice(socket_path: &PathBuf) -> Result<Vec<ExportedFunction>> {
+    // 1. Connect to Unix socket
+    let stream = UnixStream::connect(socket_path)
+        .await
+        .context("Failed to connect to Splice socket")?;
+
+    let mut framed = Framed::new(stream, SpliceCodec::default());
+
+    // 2. Perform handshake
+    framed
+        .send(Message::Handshake {
+            protocol_version: PROTOCOL_VERSION,
+            role: Role::Host,
+            capabilities: 0,
+            max_frame_size: DEFAULT_MAX_FRAME_SIZE,
+        })
+        .await
+        .context("Failed to send handshake")?;
+
+    // 3. Wait for HandshakeAck
+    match framed.next().await {
+        Some(Ok(Message::HandshakeAck { .. })) => {
+            eprintln!("✓ Handshake successful");
+        }
+        Some(Ok(other)) => anyhow::bail!("Unexpected message: {:?}", other),
+        Some(Err(e)) => anyhow::bail!("Handshake error: {}", e),
+        None => anyhow::bail!("Connection closed during handshake"),
+    }
+
+    // 4. Send ListExports
+    framed
+        .send(Message::ListExports)
+        .await
+        .context("Failed to send ListExports")?;
+
+    // 5. Receive ListExportsResult
+    match framed.next().await {
+        Some(Ok(Message::ListExportsResult { exports })) => {
+            eprintln!("✓ Received {} exports from Splice", exports.len());
+            zap_codegen::convert_splice_exports_to_exported_functions(exports)
+        }
+        Some(Ok(other)) => anyhow::bail!("Expected ListExportsResult, got: {:?}", other),
+        Some(Err(e)) => anyhow::bail!("Protocol error: {}", e),
+        None => anyhow::bail!("Connection closed before receiving exports"),
+    }
 }
 
 #[cfg(test)]

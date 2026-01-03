@@ -2152,12 +2152,17 @@ name = "zap-codegen"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "clap",
+ "futures",
  "proc-macro2",
  "quote",
  "serde",
  "serde_json",
+ "splice",
  "syn",
+ "tokio",
+ "tokio-util",
  "walkdir",
 ]
 

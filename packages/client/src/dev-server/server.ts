@@ -3,6 +3,8 @@ import path from 'path';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import { promises as fs } from 'fs';
+import { spawn, execSync } from 'child_process';
+import { existsSync } from 'fs';
 import { FileWatcher, WatchEvent } from './watcher.js';
 import { RustBuilder, BuildResult } from './rust-builder.js';
 import { ViteProxy } from './vite-proxy.js';
@@ -179,6 +181,7 @@ export class DevServer extends EventEmitter {
   private setupEventHandlers(): void {
     // File watcher events
     this.watcher.on('rust', (event: WatchEvent) => this.handleRustChange(event));
+    this.watcher.on('user-server', (event: WatchEvent) => this.handleUserServerChange(event));
     this.watcher.on('typescript', (event: WatchEvent) => this.handleTypeScriptChange(event));
     this.watcher.on('config', (event: WatchEvent) => this.handleConfigChange(event));
     this.watcher.on('error', (err) => this.log('error', `Watcher error: ${err.message}`));
@@ -688,6 +691,11 @@ export class DevServer extends EventEmitter {
 
       await this.spliceManager.start();
       cliLogger.succeedSpinner('splice', `Splice ready on ${this.splicePath}`);
+
+      // Generate initial TypeScript bindings from Splice exports
+      cliLogger.spinner('splice-codegen', 'Generating TypeScript bindings...');
+      await this.runSpliceCodegen();
+      cliLogger.succeedSpinner('splice-codegen', 'Splice bindings generated');
     } catch (err) {
       cliLogger.failSpinner('splice', 'Failed to start Splice');
       const message = err instanceof Error ? err.message : String(err);
@@ -824,6 +832,146 @@ export class DevServer extends EventEmitter {
     } else if (relativePath.includes('vite.config')) {
       cliLogger.warn('Vite config changed - restarting Vite...');
       await this.viteProxy.restart();
+    }
+  }
+
+  /**
+   * Handle user server (server/**/*.rs) file changes
+   */
+  private async handleUserServerChange(event: WatchEvent): Promise<void> {
+    const relativePath = path.relative(this.config.projectDir, event.path);
+    cliLogger.newline();
+    cliLogger.info(`[user-server:${event.type}] ${relativePath}`);
+
+    // Only proceed if Splice is running
+    if (!this.spliceManager?.isRunning()) {
+      this.log('debug', 'Splice not running, skipping user server rebuild');
+      return;
+    }
+
+    cliLogger.spinner('user-server-rebuild', 'Rebuilding user server...');
+    const rebuildStart = Date.now();
+
+    try {
+      // Step 1: Rebuild user server binary
+      const newBinaryPath = await buildUserServer(this.config.projectDir);
+
+      if (!newBinaryPath) {
+        cliLogger.failSpinner('user-server-rebuild', 'User server build failed');
+        this.hotReloadServer.notifyError('User server compilation failed');
+        return;
+      }
+
+      this.userServerBinaryPath = newBinaryPath;
+      const duration = ((Date.now() - rebuildStart) / 1000).toFixed(2);
+      cliLogger.succeedSpinner('user-server-rebuild', `User server rebuilt (${duration}s)`);
+
+      // Step 2: Wait for Splice to detect binary change and reload worker
+      this.log('info', 'Waiting for Splice to reload worker...');
+      await this.waitForSpliceReload();
+
+      // Step 3: Regenerate TypeScript bindings from updated exports
+      if (this.splicePath) {
+        cliLogger.spinner('splice-codegen', 'Regenerating Splice bindings...');
+        await this.runSpliceCodegen();
+        cliLogger.succeedSpinner('splice-codegen', 'TypeScript bindings updated');
+      }
+
+      // Step 4: Signal browser to reload
+      this.hotReloadServer.reload('rust', [relativePath]);
+      this.state.phase = 'ready';
+    } catch (err) {
+      cliLogger.failSpinner('user-server-rebuild', 'Rebuild failed');
+      const message = err instanceof Error ? err.message : String(err);
+      this.log('error', `User server rebuild error: ${message}`);
+      this.hotReloadServer.notifyError(`User server error: ${message}`);
+      this.state.phase = 'error';
+    }
+  }
+
+  /**
+   * Wait for Splice to detect binary change and reload
+   */
+  private async waitForSpliceReload(): Promise<void> {
+    // Splice ReloadManager detects binary hash change and auto-reloads
+    // Give it time to complete the reload cycle
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+
+  /**
+   * Run Splice codegen to generate TypeScript bindings
+   */
+  private async runSpliceCodegen(): Promise<void> {
+    if (!this.splicePath || !this.spliceManager?.isRunning()) {
+      throw new Error('Splice not running');
+    }
+
+    const codegenBinary = await this.findCodegenBinary();
+    if (!codegenBinary) {
+      throw new Error('Codegen binary not found');
+    }
+
+    return new Promise((resolve, reject) => {
+      const args = ['--splice-socket', this.splicePath!, '--output-dir', './src/api'];
+
+      this.log('debug', `Running codegen: ${codegenBinary} ${args.join(' ')}`);
+
+      const proc = spawn(codegenBinary, args, {
+        cwd: this.config.projectDir,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+
+      let stderr = '';
+
+      proc.stdout?.on('data', (data) => {
+        this.log('debug', `[codegen] ${data.toString().trim()}`);
+      });
+
+      proc.stderr?.on('data', (data) => {
+        stderr += data.toString();
+        this.log('warn', `[codegen] ${data.toString().trim()}`);
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0) {
+          this.log('info', 'Splice codegen completed successfully');
+          resolve();
+        } else {
+          reject(new Error(`Codegen exited with code ${code}: ${stderr}`));
+        }
+      });
+
+      proc.on('error', (err) => {
+        reject(new Error(`Codegen process error: ${err.message}`));
+      });
+    });
+  }
+
+  /**
+   * Find codegen binary in various locations
+   */
+  private async findCodegenBinary(): Promise<string | null> {
+    const candidates = [
+      this.config.codegenBinaryPath,
+      path.join(this.config.projectDir, 'bin/zap-codegen'),
+      path.join(__dirname, '../../bin/zap-codegen'),
+      path.join(this.config.projectDir, 'node_modules/@zap-js/client/bin/zap-codegen'),
+      path.join(this.config.projectDir, 'target/release/zap-codegen'),
+      path.join(this.config.projectDir, 'target/debug/zap-codegen'),
+    ].filter(Boolean) as string[];
+
+    for (const candidate of candidates) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    // Check PATH
+    try {
+      execSync('which zap-codegen', { stdio: 'ignore' });
+      return 'zap-codegen';
+    } catch {
+      return null;
     }
   }
 

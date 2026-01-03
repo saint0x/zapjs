@@ -7,7 +7,7 @@ export type WatchEventType = 'add' | 'change' | 'unlink';
 export interface WatchEvent {
   type: WatchEventType;
   path: string;
-  category: 'rust' | 'typescript' | 'config' | 'unknown';
+  category: 'rust' | 'user-server' | 'typescript' | 'config' | 'unknown';
 }
 
 export interface WatcherConfig {
@@ -127,13 +127,21 @@ export class FileWatcher extends EventEmitter {
   }
 
   /**
-   * Categorize a file based on its extension
+   * Categorize a file based on its extension and location
    */
   private categorizeFile(filePath: string): WatchEvent['category'] {
     const ext = path.extname(filePath).toLowerCase();
     const basename = path.basename(filePath);
 
-    // Rust files
+    // Check if file is in server/ directory (user's Rust server)
+    const relativePath = path.relative(this.config.rootDir, filePath);
+    if (relativePath.startsWith('server' + path.sep) || relativePath === 'server') {
+      if (ext === '.rs' || basename === 'Cargo.toml') {
+        return 'user-server';
+      }
+    }
+
+    // Rust files in packages/server (Zap runtime)
     if (ext === '.rs' || basename === 'Cargo.toml') {
       return 'rust';
     }
