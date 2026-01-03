@@ -3,7 +3,9 @@ members = [
     "packages/server",
     "packages/server/internal/core",
     "packages/server/internal/macros",
-    "packages/server/internal/codegen"
+    "packages/server/internal/codegen",
+    "packages/server/splice",
+    "packages/server/splice-bin"
 ]
 resolver = "2"
 
@@ -17,7 +19,7 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 # HTTP types
 http = "1.0"
 # HTTP parsing optimizations
-bytes = "1.5"
+bytes = { version = "1.5", features = ["serde"] }
 # SIMD string operations  
 simdutf8 = "0.1"
 

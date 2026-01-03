@@ -102,6 +102,8 @@ pub mod response;
 pub mod rpc;
 pub mod server;
 pub mod shutdown;
+pub mod splice_client;
+pub mod splice_worker;
 pub mod r#static;
 pub mod utils;
 pub mod websocket;

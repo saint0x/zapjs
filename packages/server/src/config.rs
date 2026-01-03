@@ -28,6 +28,11 @@ pub struct ZapConfig {
     /// Unix domain socket path for IPC with TypeScript
     pub ipc_socket_path: String,
 
+    /// Splice protocol socket path for Rust functions runtime
+    /// If set, connects to Splice supervisor instead of using inventory
+    #[serde(default)]
+    pub splice_socket_path: Option<String>,
+
     /// Maximum request body size in bytes (default: 16MB)
     #[serde(default = "default_max_body_size")]
     pub max_request_body_size: usize,
@@ -72,6 +77,7 @@ impl std::fmt::Debug for ZapConfig {
             .field("port", &self.port)
             .field("hostname", &self.hostname)
             .field("ipc_socket_path", &self.ipc_socket_path)
+            .field("splice_socket_path", &self.splice_socket_path)
             .field("max_request_body_size", &self.max_request_body_size)
             .field("request_timeout_secs", &self.request_timeout_secs)
             .field("keepalive_timeout_secs", &self.keepalive_timeout_secs)
@@ -150,6 +156,7 @@ impl Default for ZapConfig {
             port: 3000,
             hostname: "127.0.0.1".to_string(),
             ipc_socket_path: "/tmp/zap.sock".to_string(),
+            splice_socket_path: None,
             max_request_body_size: 16 * 1024 * 1024, // 16MB
             request_timeout_secs: 30,
             keepalive_timeout_secs: 75,

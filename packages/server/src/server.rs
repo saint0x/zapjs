@@ -652,14 +652,44 @@ impl Zap {
             );
         }
 
-        // Always start RPC server for bidirectional TS↔Rust communication
+        // Start RPC server for bidirectional TS↔Rust communication
         use crate::rpc::RpcServerHandle;
 
-        let dispatch_fn = config.rpc_dispatch.unwrap_or_else(|| {
-            // Auto-build dispatcher from inventory-registered functions
-            use crate::registry::build_rpc_dispatcher;
-            build_rpc_dispatcher()
-        });
+        let dispatch_fn = if let Some(ref splice_socket) = config.splice_socket_path {
+            // Use Splice client for distributed Rust functions
+            info!("🔌 Connecting to Splice supervisor at {}", splice_socket);
+
+            use crate::splice_client::SpliceClient;
+            let splice_client = SpliceClient::connect(splice_socket.clone()).await
+                .map_err(|e| ZapError::config(format!("Failed to connect to Splice: {}", e)))?;
+
+            let exports = splice_client.exports().await;
+            info!("✅ Connected to Splice: {} Rust functions available", exports.len());
+
+            // Build dispatch function that forwards to Splice
+            let splice_client = std::sync::Arc::new(tokio::sync::RwLock::new(splice_client));
+            std::sync::Arc::new(move |function_name: String, params: serde_json::Value| {
+                let splice_client = splice_client.clone();
+                let function_name = function_name.clone();
+                let params = params.clone();
+
+                // Spawn async task and block on result (required by RpcDispatchFn signature)
+                tokio::task::block_in_place(|| {
+                    tokio::runtime::Handle::current().block_on(async move {
+                        splice_client.read().await
+                            .invoke(function_name, params)
+                            .await
+                    })
+                })
+            }) as std::sync::Arc<dyn Fn(String, serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync>
+        } else {
+            // Use inventory-based dispatcher (in-process functions)
+            config.rpc_dispatch.unwrap_or_else(|| {
+                use crate::registry::build_rpc_dispatcher;
+                info!("📦 Using inventory-based RPC dispatcher");
+                build_rpc_dispatcher()
+            })
+        };
 
         let rpc_server = RpcServerHandle::new(
             config.ipc_socket_path.clone(),
