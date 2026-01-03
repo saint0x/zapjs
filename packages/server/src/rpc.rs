@@ -51,9 +51,10 @@ use crate::error::{ZapError, ZapResult};
 
 /// User-provided RPC dispatch function
 ///
-/// Takes (function_name, params) and returns Result<data, error_message>
+/// Takes (function_name, params, context) and returns Result<data, error_message>
 /// Using serde_json::Value for maximum flexibility - users can deserialize in their dispatch
-pub type RpcDispatchFn = Arc<dyn Fn(String, serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync + 'static>;
+/// The optional RequestContext provides trace IDs, headers, and auth information
+pub type RpcDispatchFn = Arc<dyn Fn(String, serde_json::Value, Option<crate::splice_worker::RequestContext>) -> Result<serde_json::Value, String> + Send + Sync + 'static>;
 
 /// RPC call message from TypeScript
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -227,7 +228,8 @@ fn dispatch_rpc_call(call: &RpcCallMessage, dispatch_fn: &RpcDispatchFn) -> RpcM
 
     let start = std::time::Instant::now();
 
-    match dispatch_fn(call.function_name.clone(), call.params.clone()) {
+    // RPC calls from TypeScript don't have context (only Splice calls do)
+    match dispatch_fn(call.function_name.clone(), call.params.clone(), None) {
         Ok(result) => {
             let duration = start.elapsed();
             debug!(
@@ -469,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_dispatch_success_simple() {
-        let dispatch: RpcDispatchFn = Arc::new(|func, _params| {
+        let dispatch: RpcDispatchFn = Arc::new(|func, _params, _context| {
             if func == "ping" {
                 Ok(json!({"pong": true}))
             } else {
@@ -498,7 +500,7 @@ mod tests {
 
     #[test]
     fn test_dispatch_success_with_params() {
-        let dispatch: RpcDispatchFn = Arc::new(|func, params| {
+        let dispatch: RpcDispatchFn = Arc::new(|func, params, _context| {
             if func == "add" {
                 let a = params["a"].as_i64().unwrap_or(0);
                 let b = params["b"].as_i64().unwrap_or(0);
@@ -527,7 +529,7 @@ mod tests {
 
     #[test]
     fn test_dispatch_error_unknown_function() {
-        let dispatch: RpcDispatchFn = Arc::new(|func, _params| {
+        let dispatch: RpcDispatchFn = Arc::new(|func, _params, _context| {
             match func.as_str() {
                 "valid_func" => Ok(json!({"ok": true})),
                 _ => Err(format!("Unknown RPC method: {}", func)),
@@ -556,7 +558,7 @@ mod tests {
 
     #[test]
     fn test_dispatch_error_invalid_params() {
-        let dispatch: RpcDispatchFn = Arc::new(|func, params| {
+        let dispatch: RpcDispatchFn = Arc::new(|func, params, _context| {
             if func == "divide" {
                 let a = params["a"].as_f64().ok_or("Missing parameter 'a'")?;
                 let b = params["b"].as_f64().ok_or("Missing parameter 'b'")?;
@@ -606,7 +608,7 @@ mod tests {
 
     #[test]
     fn test_dispatch_multiple_functions() {
-        let dispatch: RpcDispatchFn = Arc::new(|func, params| match func.as_str() {
+        let dispatch: RpcDispatchFn = Arc::new(|func, params, _context| match func.as_str() {
             "get_user" => Ok(json!({"id": params["id"], "name": "John Doe"})),
             "get_benchmarks" => Ok(json!({"latency_ns": 9, "throughput": "1M req/s"})),
             "list_users" => {
@@ -668,7 +670,7 @@ mod tests {
 
     #[test]
     fn test_rpc_server_handle_creation() {
-        let dispatch: RpcDispatchFn = Arc::new(|_func, _params| Ok(json!({"ok": true})));
+        let dispatch: RpcDispatchFn = Arc::new(|_func, _params, _context| Ok(json!({"ok": true})));
 
         let handle = RpcServerHandle::new("/tmp/test-rpc.sock".to_string(), dispatch);
 
@@ -711,7 +713,7 @@ mod tests {
 
     #[test]
     fn test_unicode_and_special_characters() {
-        let dispatch: RpcDispatchFn = Arc::new(|func, params| {
+        let dispatch: RpcDispatchFn = Arc::new(|func, params, _context| {
             if func == "echo" {
                 Ok(params)
             } else {
@@ -742,7 +744,7 @@ mod tests {
 
     #[test]
     fn test_nested_json_params() {
-        let dispatch: RpcDispatchFn = Arc::new(|func, params| {
+        let dispatch: RpcDispatchFn = Arc::new(|func, params, _context| {
             if func == "process_data" {
                 let nested_value = &params["data"]["nested"]["value"];
                 Ok(json!({"processed": nested_value}))
@@ -779,7 +781,7 @@ mod tests {
 
     #[test]
     fn test_null_and_empty_values() {
-        let dispatch: RpcDispatchFn = Arc::new(|_func, params| Ok(params));
+        let dispatch: RpcDispatchFn = Arc::new(|_func, params, _context| Ok(params));
 
         let call = RpcCallMessage {
             msg_type: "rpc_call".to_string(),

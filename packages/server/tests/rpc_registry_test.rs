@@ -42,7 +42,8 @@ async fn test_registry_builds() {
     // Test sync function call
     let result = dispatcher(
         "get_test_data".to_string(),
-        json!({"id": 123})
+        json!({"id": 123}),
+        None
     );
     assert!(result.is_ok(), "get_test_data should succeed");
     assert_eq!(result.unwrap(), json!("test_data_123"));
@@ -55,7 +56,8 @@ async fn test_async_function() {
     // Test async function call
     let result = dispatcher(
         "async_greet".to_string(),
-        json!({"name": "World"})
+        json!({"name": "World"}),
+        None
     );
     assert!(result.is_ok(), "async_greet should succeed");
     assert_eq!(result.unwrap(), json!("Hello, World!"));
@@ -68,7 +70,8 @@ async fn test_result_success() {
     // Test successful division
     let result = dispatcher(
         "divide".to_string(),
-        json!({"a": 10.0, "b": 2.0})
+        json!({"a": 10.0, "b": 2.0}),
+        None
     );
     assert!(result.is_ok(), "divide should succeed");
     assert_eq!(result.unwrap(), json!(5.0));
@@ -81,7 +84,8 @@ async fn test_result_error() {
     // Test division by zero error
     let result = dispatcher(
         "divide".to_string(),
-        json!({"a": 10.0, "b": 0.0})
+        json!({"a": 10.0, "b": 0.0}),
+        None
     );
     assert!(result.is_err(), "divide by zero should fail");
     let error_msg = result.unwrap_err();
@@ -95,7 +99,8 @@ async fn test_async_result_success() {
     // Test successful async division
     let result = dispatcher(
         "async_divide".to_string(),
-        json!({"a": 20.0, "b": 4.0})
+        json!({"a": 20.0, "b": 4.0}),
+        None
     );
     assert!(result.is_ok(), "async_divide should succeed");
     assert_eq!(result.unwrap(), json!(5.0));
@@ -108,7 +113,8 @@ async fn test_unknown_function() {
     // Test calling unknown function
     let result = dispatcher(
         "unknown_function".to_string(),
-        json!({})
+        json!({}),
+        None
     );
     assert!(result.is_err(), "unknown function should fail");
     let error_msg = result.unwrap_err();
@@ -122,7 +128,8 @@ async fn test_missing_parameter() {
     // Test calling function with missing parameter
     let result = dispatcher(
         "get_test_data".to_string(),
-        json!({}) // missing 'id' parameter
+        json!({}), // missing 'id' parameter
+        None
     );
     assert!(result.is_err(), "missing parameter should fail");
     let error_msg = result.unwrap_err();
@@ -136,7 +143,8 @@ async fn test_wrong_parameter_type() {
     // Test calling function with wrong parameter type
     let result = dispatcher(
         "get_test_data".to_string(),
-        json!({"id": "not_a_number"}) // string instead of u64
+        json!({"id": "not_a_number"}), // string instead of u64
+        None
     );
     assert!(result.is_err(), "wrong parameter type should fail");
     let error_msg = result.unwrap_err();
@@ -150,7 +158,8 @@ async fn test_non_object_params() {
     // Test calling function with array params
     let result = dispatcher(
         "get_test_data".to_string(),
-        json!([123]) // array instead of object
+        json!([123]), // array instead of object
+        None
     );
     assert!(result.is_err(), "non-object params should fail");
     let error_msg = result.unwrap_err();
@@ -159,7 +168,8 @@ async fn test_non_object_params() {
     // Test calling function with string params
     let result = dispatcher(
         "get_test_data".to_string(),
-        json!("test") // string instead of object
+        json!("test"), // string instead of object
+        None
     );
     assert!(result.is_err(), "string params should fail");
     let error_msg = result.unwrap_err();

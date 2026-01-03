@@ -89,6 +89,7 @@ extern crate self as zap;
 
 pub mod config;
 pub mod connection_pool;
+pub mod context;
 pub mod error;
 pub mod handler;
 pub mod ipc;
@@ -111,6 +112,7 @@ pub mod websocket;
 // Re-export main types for convenient use
 pub use config::{ServerConfig, ZapConfig};
 pub use connection_pool::{ConnectionPool, PoolConfig, PoolStats};
+pub use context::Context;
 pub use error::{ZapError, ZapResult, ErrorResponse};
 pub use handler::{AsyncHandler, BoxedHandler, Handler, SimpleHandler};
 pub use ipc::{IpcMessage, IpcRequest, IpcServer, IpcClient, IpcEncoding};
@@ -140,8 +142,9 @@ pub use registry::build_rpc_dispatcher;
 // Internal types for macro use - not part of public API
 #[doc(hidden)]
 pub mod __private {
-    pub use inventory;
-    pub use crate::registry::{ExportedFunction, FunctionWrapper};
+    pub use linkme;
+    pub use crate::context::Context;
+    pub use crate::registry::{ExportedFunction, FunctionWrapper, EXPORTS};
 }
 
 #[cfg(test)]

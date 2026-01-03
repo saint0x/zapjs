@@ -75,17 +75,43 @@ fn validate_function(func: &ItemFn) -> Result<(), proc_macro::TokenStream> {
     Ok(())
 }
 
+/// Check if a type is Context (for Context parameter detection)
+fn is_context_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            return segment.ident == "Context";
+        }
+    }
+    false
+}
+
 /// Extract metadata from a function signature
 fn extract_metadata(func: &ItemFn) -> FunctionMetadata {
     let name = func.sig.ident.to_string();
     let is_async = func.sig.asyncness.is_some();
 
-    // Extract parameters
+    // Check if first parameter is Context
+    let has_context = func.sig.inputs.first()
+        .map_or(false, |arg| {
+            if let FnArg::Typed(PatType { ty, .. }) = arg {
+                is_context_type(ty)
+            } else {
+                false
+            }
+        });
+
+    // Extract parameters (skip Context if present)
     let params: Vec<ParamMetadata> = func
         .sig
         .inputs
         .iter()
-        .filter_map(|arg| {
+        .enumerate()
+        .filter_map(|(idx, arg)| {
+            // Skip first parameter if it's Context
+            if idx == 0 && has_context {
+                return None;
+            }
+
             if let FnArg::Typed(PatType { pat, ty, .. }) = arg {
                 if let syn::Pat::Ident(pat_ident) = &**pat {
                     let param_name = pat_ident.ident.to_string();
@@ -129,6 +155,7 @@ fn extract_metadata(func: &ItemFn) -> FunctionMetadata {
         params,
         return_type,
         is_async,
+        has_context,
         doc_comments,
         line_number: 0, // Would need span info to get real line number
     }
@@ -139,14 +166,20 @@ fn generate_wrapper(func: &ItemFn, metadata: &FunctionMetadata) -> proc_macro2::
     let fn_name = &func.sig.ident;
     let wrapper_name = format_ident!("__zap_wrapper_{}", fn_name);
 
-    // Get parameter types for proper deserialization
-    let param_types: Vec<_> = func.sig.inputs.iter().filter_map(|arg| {
-        if let FnArg::Typed(PatType { ty, .. }) = arg {
-            Some(ty.clone())
-        } else {
-            None
-        }
-    }).collect();
+    // Get parameter types for proper deserialization (skip Context if present)
+    let param_types: Vec<_> = func.sig.inputs.iter()
+        .enumerate()
+        .filter_map(|(idx, arg)| {
+            // Skip first param if it's Context
+            if idx == 0 && metadata.has_context {
+                return None;
+            }
+            if let FnArg::Typed(PatType { ty, .. }) = arg {
+                Some(ty.clone())
+            } else {
+                None
+            }
+        }).collect();
 
     // Generate parameter deserialization code with proper type conversion
     let param_deserialize: Vec<_> = metadata
@@ -176,10 +209,20 @@ fn generate_wrapper(func: &ItemFn, metadata: &FunctionMetadata) -> proc_macro2::
         .map(|p| format_ident!("{}", p.name))
         .collect();
 
-    let call_expr = if metadata.is_async {
-        quote! { #fn_name(#(#param_names),*).await }
+    let call_expr = if metadata.has_context {
+        // Pass context as first parameter
+        if metadata.is_async {
+            quote! { #fn_name(ctx, #(#param_names),*).await }
+        } else {
+            quote! { #fn_name(ctx, #(#param_names),*) }
+        }
     } else {
-        quote! { #fn_name(#(#param_names),*) }
+        // No context parameter
+        if metadata.is_async {
+            quote! { #fn_name(#(#param_names),*).await }
+        } else {
+            quote! { #fn_name(#(#param_names),*) }
+        }
     };
 
     // Handle Result types - if the return type is a Result, handle both Ok and Err cases
@@ -207,25 +250,53 @@ fn generate_wrapper(func: &ItemFn, metadata: &FunctionMetadata) -> proc_macro2::
         }
     };
 
-    // Generate the full wrapper
-    if metadata.is_async {
-        quote! {
-            #[doc(hidden)]
-            pub async fn #wrapper_name(
-                params: &std::collections::HashMap<String, serde_json::Value>
-            ) -> Result<serde_json::Value, String> {
-                #(#param_deserialize)*
-                #result_handling
+    // Generate the full wrapper with conditional Context parameter
+    if metadata.has_context {
+        // Context-aware wrapper signature
+        if metadata.is_async {
+            quote! {
+                #[doc(hidden)]
+                pub async fn #wrapper_name(
+                    ctx: &::zap_server::__private::Context,
+                    params: &std::collections::HashMap<String, serde_json::Value>
+                ) -> Result<serde_json::Value, String> {
+                    #(#param_deserialize)*
+                    #result_handling
+                }
+            }
+        } else {
+            quote! {
+                #[doc(hidden)]
+                pub fn #wrapper_name(
+                    ctx: &::zap_server::__private::Context,
+                    params: &std::collections::HashMap<String, serde_json::Value>
+                ) -> Result<serde_json::Value, String> {
+                    #(#param_deserialize)*
+                    #result_handling
+                }
             }
         }
     } else {
-        quote! {
-            #[doc(hidden)]
-            pub fn #wrapper_name(
-                params: &std::collections::HashMap<String, serde_json::Value>
-            ) -> Result<serde_json::Value, String> {
-                #(#param_deserialize)*
-                #result_handling
+        // Legacy wrapper signature (no Context)
+        if metadata.is_async {
+            quote! {
+                #[doc(hidden)]
+                pub async fn #wrapper_name(
+                    params: &std::collections::HashMap<String, serde_json::Value>
+                ) -> Result<serde_json::Value, String> {
+                    #(#param_deserialize)*
+                    #result_handling
+                }
+            }
+        } else {
+            quote! {
+                #[doc(hidden)]
+                pub fn #wrapper_name(
+                    params: &std::collections::HashMap<String, serde_json::Value>
+                ) -> Result<serde_json::Value, String> {
+                    #(#param_deserialize)*
+                    #result_handling
+                }
             }
         }
     }
@@ -249,7 +320,8 @@ fn generate_metadata_emission(metadata: &FunctionMetadata) -> proc_macro2::Token
     metadata_str.push_str(r#"],"return_type":"unit"}"#);
 
     // Emit as a compile-time constant that the build script can extract
-    let const_name = format_ident!("__ZAP_EXPORT_{}", fn_name.to_uppercase());
+    // Use different prefix to avoid collision with linkme static
+    let const_name = format_ident!("__ZAP_METADATA_{}", fn_name.to_uppercase());
 
     quote! {
         #[doc(hidden)]
@@ -258,41 +330,72 @@ fn generate_metadata_emission(metadata: &FunctionMetadata) -> proc_macro2::Token
     }
 }
 
-/// Generate inventory registration code for runtime function registry
+/// Generate linkme registration code for runtime function registry
 fn generate_registration(metadata: &FunctionMetadata) -> proc_macro2::TokenStream {
     let fn_name = &metadata.name;
     let wrapper_name = format_ident!("__zap_wrapper_{}", fn_name);
     let is_async = metadata.is_async;
+    let has_context = metadata.has_context;
 
-    if is_async {
-        quote! {
-            ::zap_server::__private::inventory::submit! {
-                ::zap_server::__private::ExportedFunction {
-                    name: #fn_name,
-                    is_async: true,
-                    wrapper: ::zap_server::__private::FunctionWrapper::Async(
-                        |params| {
-                            // Clone params to move into the async block
-                            // This is necessary because the closure signature requires 'static lifetime
-                            let params_owned = params.clone();
-                            ::std::boxed::Box::pin(async move {
-                                #wrapper_name(&params_owned).await
-                            })
-                        }
-                    ),
-                }
+    // Determine which FunctionWrapper variant to use based on (is_async, has_context)
+    let wrapper_variant = match (is_async, has_context) {
+        (false, false) => {
+            // Sync, no context
+            quote! {
+                ::zap_server::__private::FunctionWrapper::Sync(#wrapper_name)
             }
         }
-    } else {
-        quote! {
-            ::zap_server::__private::inventory::submit! {
-                ::zap_server::__private::ExportedFunction {
-                    name: #fn_name,
-                    is_async: false,
-                    wrapper: ::zap_server::__private::FunctionWrapper::Sync(#wrapper_name),
-                }
+        (true, false) => {
+            // Async, no context
+            quote! {
+                ::zap_server::__private::FunctionWrapper::Async(
+                    |params| {
+                        let params_owned = params.clone();
+                        ::std::boxed::Box::pin(async move {
+                            #wrapper_name(&params_owned).await
+                        })
+                    }
+                )
             }
         }
+        (false, true) => {
+            // Sync with context
+            quote! {
+                ::zap_server::__private::FunctionWrapper::SyncCtx(#wrapper_name)
+            }
+        }
+        (true, true) => {
+            // Async with context
+            quote! {
+                ::zap_server::__private::FunctionWrapper::AsyncCtx(
+                    |ctx, params| {
+                        let params_owned = params.clone();
+                        ::std::boxed::Box::pin(async move {
+                            #wrapper_name(ctx, &params_owned).await
+                        })
+                    }
+                )
+            }
+        }
+    };
+
+    // Use linkme distributed_slice instead of inventory
+    // Generate unique static variable name using function name
+    let static_name = syn::Ident::new(
+        &format!("__ZAP_EXPORT_{}", metadata.name.to_uppercase()),
+        proc_macro2::Span::call_site()
+    );
+
+    quote! {
+        #[::zap_server::__private::linkme::distributed_slice(::zap_server::__private::EXPORTS)]
+        #[linkme(crate = ::zap_server::__private::linkme)]
+        static #static_name: ::zap_server::__private::ExportedFunction =
+            ::zap_server::__private::ExportedFunction {
+                name: #fn_name,
+                is_async: #is_async,
+                has_context: #has_context,
+                wrapper: #wrapper_variant,
+            };
     }
 }
 

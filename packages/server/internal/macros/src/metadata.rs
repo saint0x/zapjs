@@ -11,6 +11,8 @@ pub struct FunctionMetadata {
     pub return_type: TypeMetadata,
     /// Whether the function is async
     pub is_async: bool,
+    /// Whether the function requires Context parameter
+    pub has_context: bool,
     /// Documentation comments
     pub doc_comments: Vec<String>,
     /// Line number in source file (for error reporting)

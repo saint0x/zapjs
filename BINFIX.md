@@ -1,12 +1,14 @@
-# zap-rustd: Rust Functions Runtime
+# Splice: Distributed Rust Functions Runtime
 
-Production specification for ZapJS Rust server functions.
+Production-ready Rust function execution for ZapJS via process isolation and stable protocol.
+
+**Status:** Protocol complete. Context support ✅. CLI integration pending.
 
 ---
 
 ## The Problem
 
-ZapJS uses `inventory::collect!` to discover `#[zap::export]` functions at startup. This works when user code is compiled into the same binary as the zap runtime. It fails completely when the runtime is pre-built and distributed via npm—user code compiled separately cannot register into a pre-compiled binary's inventory.
+ZapJS uses `inventory::collect!` to discover `#[zap::export]` functions at startup. This fails when the runtime is pre-built and distributed via npm—user code compiled separately cannot register into a frozen binary's inventory.
 
 ```
 Pre-built zap binary              User's Rust code
@@ -16,176 +18,196 @@ Pre-built zap binary              User's Rust code
 └─────────────────────┘           └─────────────────────┘
 ```
 
-**Result**: 0% of Rust server functions work for external users.
-
----
-
-## The Solution
-
-Introduce `zap-rustd`—a dedicated Rust Functions Runtime that:
-
-- Runs as a supervised child process
-- Loads and executes user Rust code
-- Speaks a stable protocol with the main zap runtime
-- Handles async, concurrency, cancellation, streaming, crashes, and hot reload
-
-The main `zap` binary becomes a pure client—no FFI, no dylibs, no unsafe code.
+**Solution:** Splice supervisor runs user code in a separate process. Protocol bridges the gap. Replace `inventory` with `linkme` distributed slices.
 
 ---
 
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│                         zap (main)                              │
-│                                                                 │
-│  HTTP Server    Static Files    TS Handlers    Rust Proxy      │
-│       │              │               │              │          │
-└───────┼──────────────┼───────────────┼──────────────┼──────────┘
-        │              │               │              │
-        └──────────────┴───────────────┘              │
-                                                      │ Unix Socket
-                                                      ▼
-┌────────────────────────────────────────────────────────────────┐
-│                      zap-rustd (supervisor)                     │
-│                                                                 │
-│  Protocol Router    Health Monitor    Hot Reload    Metrics    │
-│         │                 │                │           │       │
-└─────────┼─────────────────┼────────────────┼───────────┼───────┘
-          │                 │                │           │
-          └─────────────────┴────────────────┘           │
-                                                         │ Unix Socket
-                                                         ▼
-┌────────────────────────────────────────────────────────────────┐
-│                     user-server (worker)                        │
-│                                                                 │
-│  Tokio Runtime    #[export] Functions    DB/HTTP/FS Access     │
-│                                                                 │
-└────────────────────────────────────────────────────────────────┘
+zap (HTTP server)
+   │ connects via Unix socket
+   ▼
+splice (supervisor)  ← .zap/splice.sock
+   │ spawns & monitors
+   ▼
+user-server (worker) ← ZAP_SOCKET env var
 ```
 
-**Process hierarchy**:
-```
-zap (PID 1000)
-└── zap-rustd (PID 1001)
-    └── user-server (PID 1002)
-```
-
-**Crash isolation**: User code crashes kill only the worker. zap-rustd restarts it. zap stays up.
+**Crash isolation:** User code crashes only kill worker. Splice restarts. Zap stays up.
 
 ---
 
-## Protocol
+## ✅ Completed
 
-### Transport
+### Protocol Implementation
+- **Location:** `packages/server/splice/src/protocol.rs`
+- **Tests:** 145 passing (codec, state machines, concurrency, error recovery)
+- **Features:** 18 message types, MessagePack framing, role-based protocol (Host/Worker)
+- **RequestContext:** Already includes trace_id, span_id, headers, auth (lines 350-360)
 
-| Platform | Transport | Address |
-|----------|-----------|---------|
-| macOS/Linux | Unix socket | `.zap/rustd.sock` |
-| Windows | Named pipe | `\\.\pipe\zap-rustd-{hash}` |
+### Splice Supervisor Binary
+- **Binary:** `splice` (1.8MB) - packaged in all platform releases
+- **Location:** `packages/server/splice-bin/src/main.rs`
+- **Features:** Crash recovery (exponential backoff), circuit breaker, concurrency limits (1024 global, 100/function), health checks, hot reload support
 
-### Framing
+### Zap Server Integration
+- **Splice Client:** `packages/server/src/splice_client.rs` - handshake, export discovery, invocation, request ID correlation
+- **Auto-connection:** Server detects `config.splice_socket_path` and connects automatically (server.rs:658-692)
+- **Config:** `splice_socket_path: Option<String>` field in ZapConfig
 
-```
-┌──────────────┬──────────────┬─────────────────────────┐
-│ Length (4B)  │ Type (1B)    │ Payload (msgpack)       │
-│ big-endian   │              │                         │
-└──────────────┴──────────────┴─────────────────────────┘
-```
+### Worker Runtime
+- **Location:** `packages/server/src/splice_worker.rs`
+- **Features:** Connects to supervisor, MessagePack codec, uses existing `build_rpc_dispatcher()` from registry
+- **Protocol:** MessagePack → JSON → dispatcher → JSON → MessagePack (lines 155-183)
 
-### Roles
+---
 
-Two protocol roles with distinct message sets:
+## 📋 Implementation Checklist
 
-**Host role** (zap → zap-rustd):
-```
-Send:    Handshake, ListExports, Invoke, Cancel, Shutdown, HealthCheck, StreamAck
-Receive: HandshakeAck, ListExportsResult, InvokeResult, InvokeError,
-         StreamStart, StreamChunk, StreamEnd, StreamError,
-         CancelAck, ShutdownAck, HealthStatus, LogEvent
-```
+### Phase 1: Remove Inventory & Add Context Support ✅
 
-**Worker role** (user-server → zap-rustd):
-```
-Send:    Handshake, InvokeResult, InvokeError,
-         StreamStart, StreamChunk, StreamEnd, StreamError,
-         CancelAck, LogEvent
-Receive: HandshakeAck, Invoke, Cancel, Shutdown, StreamAck
-```
+**Goal:** Enable user functions to access request context and remove inventory dependency.
 
-### Multiplexing
+- [x] **Add Context struct** (`packages/server/src/context.rs`)
+  - ✅ Created Context wrapper with: trace_id, span_id, headers, auth (line 8-43)
+  - ✅ Methods: trace_id(), span_id(), header(), headers(), auth(), user_id(), has_role()
+  - ✅ Constructed from protocol's existing RequestContext via Context::new()
+  - Note: Cancellation token deferred to Phase 3.5
 
-- Multiple Invoke requests in-flight concurrently on single connection
-- Responses arrive in any order, correlated by `request_id: u64`
-- No head-of-line blocking
-- Payloads > max_frame_size rejected with `FrameTooLarge` error
+- [x] **Switch from inventory to linkme** (`packages/server/src/registry.rs`)
+  - ✅ Replaced `inventory::collect!` with `linkme::distributed_slice!` (line 78)
+  - ✅ Defined `EXPORTS: [ExportedFunction]` distributed slice
+  - ✅ Updated `build_rpc_dispatcher()` to iterate `EXPORTS` (line 118)
+  - ✅ Removed inventory dependency from Cargo.toml
 
-### Messages
+- [x] **Update export macro for linkme** (`packages/server/internal/macros/src/lib.rs`)
+  - ✅ Replaced `inventory::submit!` with `#[linkme::distributed_slice(...)]` (line 389)
+  - ✅ Added `is_context_type()` helper for Context parameter detection (line 78)
+  - ✅ Modified wrapper to conditionally accept Context parameter (line 164-303)
+  - ✅ Generates unique static names to avoid collisions: `__ZAP_EXPORT_{FUNCTION}` (line 383)
+  - ✅ Full backward compatibility: functions without Context use Sync/Async variants
 
-```
-0x01 Handshake          Connection init (includes role: Host | Worker)
-0x02 HandshakeAck       Connection accepted
-0x03 Shutdown           Graceful shutdown request
-0x04 ShutdownAck        Shutdown acknowledged
+- [x] **Update splice_worker for Context** (`packages/server/src/splice_worker.rs`)
+  - ✅ Updated dispatcher call to pass RequestContext (line 159)
+  - ✅ Updated collect_exports() to use linkme EXPORTS (line 213)
+  - Note: Context construction happens in registry dispatcher, not splice_worker
 
-0x10 ListExports        Request function registry
-0x11 ListExportsResult  Function registry
+- [x] **Update registry for Context** (`packages/server/src/registry.rs`)
+  - ✅ Expanded `FunctionWrapper` enum to 4 variants: Sync, Async, SyncCtx, AsyncCtx (line 18-27)
+  - ✅ Added `has_context: bool` field to `ExportedFunction` (line 71)
+  - ✅ Updated wrapper.call() to accept `Option<&Context>` (line 35-58)
+  - ✅ Dispatcher constructs Context from RequestContext and passes to wrapper (line 150)
 
-0x20 Invoke             Call function
-0x21 InvokeResult       Function result
-0x22 InvokeError        Function error
+- [x] **Remove inventory entirely**
+  - ✅ Deleted from packages/server/Cargo.toml
+  - ✅ Deleted from packages/server/internal/macros/Cargo.toml
+  - ✅ Removed `pub use inventory` from lib.rs (replaced with linkme)
+  - ✅ Updated __private module exports (src/lib.rs:144)
 
-0x30 StreamStart        Begin streaming (includes initial window)
-0x31 StreamChunk        Stream data
-0x32 StreamEnd          End streaming
-0x33 StreamError        Stream failed
-0x34 StreamAck          Backpressure acknowledgment
+**Tests:** All 83 tests passing. Registry functions work with and without Context parameter.
 
-0x40 Cancel             Cancel request
-0x41 CancelAck          Cancellation signal delivered
+---
 
-0x50 LogEvent           Structured log
-0x60 HealthCheck        Health probe
-0x61 HealthStatus       Health response
-```
+### Phase 2: CLI Integration
 
-### Handshake
+**Goal:** Wire Splice into dev/build/serve workflows.
 
-```rust
-struct Handshake {
-    protocol_version: u32,         // 0x00010000 = v1.0
-    role: Role,                    // Host | Worker
-    capabilities: u32,             // Bitflags
-    max_frame_size: u32,           // 100MB default
-}
+#### TypeScript Utilities
 
-enum Role {
-    Host = 1,
-    Worker = 2,
-}
+- [ ] **Binary resolver** (`packages/client/src/cli/utils/binary-resolver.ts`)
+  - Add `resolveSpliceBinary()` function
+  - Resolve from `@zap-js/{platform}/bin/splice`
+  - Return null if not found (graceful fallback)
 
-// Capability flags
-const CAP_STREAMING: u32    = 1 << 0;
-const CAP_CANCELLATION: u32 = 1 << 1;
-const CAP_COMPRESSION: u32  = 1 << 2;
+- [ ] **Splice process manager** (`packages/client/src/runtime/splice-manager.ts`)
+  - Class: `start()`, `stop()`, `waitForSocket()`
+  - Spawn splice with `--socket` and `--worker` args
+  - Handle stdout/stderr forwarding
+  - Graceful shutdown: SIGTERM → wait → SIGKILL
 
-struct HandshakeAck {
-    protocol_version: u32,
-    capabilities: u32,             // Negotiated (intersection)
-    server_id: [u8; 16],           // UUID
-    export_count: u32,
-}
-```
+- [ ] **User server builder** (`packages/client/src/cli/utils/user-server-builder.ts`)
+  - `hasUserServer(projectDir)` - check for server/Cargo.toml
+  - `buildUserServer({ projectDir, release })` - run cargo build
+  - Return binary path: server/target/{debug|release}/server
 
-### Invoke
+#### CLI Commands
+
+- [ ] **Dev command** (`packages/client/src/dev-server/server.ts`)
+  - Check `hasUserServer(process.cwd())`
+  - Build user server (debug mode for speed)
+  - Spawn Splice supervisor before starting zap binary
+  - Set `splice_socket_path` in ZapConfig
+  - Cleanup Splice on shutdown
+
+- [ ] **Build command** (`packages/client/src/cli/commands/build.ts`)
+  - Check `hasUserServer(process.cwd())`
+  - Run `cargo build --release` in server/ directory
+  - Copy server/target/release/server to dist/bin/server
+  - Copy splice binary to dist/bin/splice
+  - Skip if no server/Cargo.toml (graceful)
+
+- [ ] **Serve command** (`packages/client/src/cli/commands/serve.ts`)
+  - Check for dist/bin/server and dist/bin/splice
+  - Spawn Splice in production mode
+  - Set splice_socket_path in config
+  - Handle missing binaries gracefully (log warning, continue without Rust functions)
+
+- [ ] **Type definitions** (`packages/client/src/runtime/types.ts`)
+  - Add `splice_socket_path?: string` to ZapConfig interface
+
+---
+
+### Phase 3: Testing & Polish
+
+**Goal:** Verify end-to-end and add developer experience improvements.
+
+- [ ] **Create E2E test project**
+  - Simple user-server with 2-3 exported functions
+  - One sync function, one async function
+  - Use Context to access headers and trace_id
+  - Verify full workflow: dev → build → serve
+
+- [ ] **Test crash recovery**
+  - Function that panics
+  - Verify supervisor restarts worker
+  - Verify subsequent requests succeed
+
+- [ ] **Test Context propagation**
+  - Send request with custom headers
+  - Verify function receives headers via ctx.header()
+  - Verify trace_id propagates correctly
+
+- [ ] **TypeScript codegen** (`packages/client/src/codegen/`)
+  - Parse ListExportsResult from Splice
+  - Generate TypeScript types from Rust signatures
+  - Generate rpc.call() wrappers with proper types
+  - Auto-import in project
+
+- [ ] **Streaming support** (Phase 3.5 - Optional)
+  - Verify StreamStart/StreamChunk/StreamEnd messages work
+  - Test backpressure with StreamAck
+  - Generate AsyncIterable wrappers in codegen
+
+- [ ] **Hot reload E2E**
+  - Modify Rust function while dev server running
+  - Verify file watcher triggers cargo build
+  - Verify Splice detects new binary and hot swaps
+  - Verify zero downtime
+
+---
+
+## Protocol Reference (Existing)
+
+### Invoke Message (Already Implemented)
 
 ```rust
 struct Invoke {
-    request_id: u64,             // Compact, fast comparison
+    request_id: u64,
     function_name: String,
     params: Bytes,               // msgpack-encoded
-    deadline_ms: u32,            // 0 = no deadline
-    context: RequestContext,
+    deadline_ms: u32,
+    context: RequestContext,     // ← THIS IS ALREADY HERE
 }
 
 struct RequestContext {
@@ -199,673 +221,92 @@ struct AuthContext {
     user_id: String,
     roles: Vec<String>,
 }
-
-struct InvokeResult {
-    request_id: u64,
-    result: Bytes,               // msgpack-encoded
-    duration_us: u64,
-}
-
-struct InvokeError {
-    request_id: u64,
-    code: u16,
-    kind: u8,
-    message: String,
-    details: Option<Bytes>,      // msgpack-encoded
-}
 ```
 
-### Error
-
-```rust
-enum ErrorKind {
-    User = 1,        // Expected error from user code
-    System = 2,      // Internal error
-    Timeout = 3,     // Deadline exceeded
-    Cancelled = 4,   // Request cancelled
-}
-
-// Error codes
-1000 InvalidRequest
-1001 InvalidParams
-1002 FunctionNotFound
-1003 Unauthorized
-1004 FrameTooLarge
-2000 ExecutionFailed
-2001 Timeout
-2002 Cancelled
-2003 Panic
-3000 InternalError
-3001 Unavailable
-3002 Overloaded
-```
-
-### Streaming
-
-```rust
-struct StreamStart {
-    request_id: u64,
-    window: u32,                 // Initial credit (chunks)
-}
-
-struct StreamChunk {
-    request_id: u64,
-    sequence: u64,
-    data: Bytes,
-}
-
-struct StreamEnd {
-    request_id: u64,
-    total_chunks: u64,
-}
-
-struct StreamError {
-    request_id: u64,
-    code: u16,
-    message: String,
-}
-
-struct StreamAck {
-    request_id: u64,
-    ack_sequence: u64,           // Ack'd up to this sequence
-    window: u32,                 // Additional credit (0 = pause)
-}
-```
-
-**Backpressure flow**:
-1. `StreamStart` includes initial window (e.g., 16 chunks)
-2. Sender sends chunks until window exhausted
-3. Receiver sends `StreamAck` to grant more credit
-4. Sender blocks if window is 0
-
-### Cancellation Semantics
-
-```
-- Once zap-rustd sends InvokeError{Timeout} or InvokeError{Cancelled},
-  that request_id is terminal
-- Any subsequent worker output for that request_id is silently discarded
-- CancelAck means "signal delivered to worker" not "task stopped"
-- Cancel arriving after InvokeResult is a no-op (result already sent)
-```
+**Key insight:** We don't need a new SDK. RequestContext already exists in the protocol. We just need to expose it to user functions via a simple Context wrapper.
 
 ---
 
-## SDK
-
-### User writes
+## User-Facing API (After Implementation)
 
 ```rust
-use zap::{export, Context, Error, Result, Stream};
-use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
-use once_cell::sync::OnceCell;
-
-#[derive(Serialize, Deserialize)]
-pub struct User {
-    pub id: i64,
-    pub name: String,
-}
-
-// Worker owns its resources (not provided by Context)
-static POOL: OnceCell<PgPool> = OnceCell::new();
-
-pub async fn init() {
-    let url = std::env::var("DATABASE_URL").unwrap();
-    let pool = PgPool::connect(&url).await.unwrap();
-    POOL.set(pool).unwrap();
-}
+use zap_server::{export, Context};
 
 #[export]
-pub async fn get_user(id: i64, ctx: Context) -> Result<User> {
-    let pool = POOL.get().unwrap();
-    let user = sqlx::query_as!(User, "SELECT * FROM users WHERE id = $1", id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| Error::not_found("user not found"))?;
-    Ok(user)
+pub async fn get_user(id: i64, ctx: Context) -> Result<User, String> {
+    // Access trace ID for logging
+    println!("trace_id: {}", ctx.trace_id());
+
+    // Access headers
+    if let Some(api_key) = ctx.header("x-api-key") {
+        // Authenticate
+    }
+
+    // Access auth context
+    if let Some(user_id) = ctx.user_id() {
+        println!("Request from user: {}", user_id);
+    }
+
+    // Check cancellation
+    if ctx.is_cancelled() {
+        return Err("Request cancelled".to_string());
+    }
+
+    // Function logic
+    Ok(User { id, name: "John".to_string() })
 }
 
+// Functions without Context still work (backward compatible)
 #[export]
-pub async fn list_users(ctx: Context) -> Result<Stream<User>> {
-    let pool = POOL.get().unwrap();
-    let (tx, stream) = Stream::channel();
-
-    tokio::spawn(async move {
-        let mut cursor = sqlx::query_as!(User, "SELECT * FROM users")
-            .fetch(pool);
-
-        while let Some(result) = cursor.next().await {
-            if ctx.is_cancelled() {
-                break;
-            }
-            match result {
-                Ok(user) => {
-                    if tx.send(user).await.is_err() {
-                        break;
-                    }
-                }
-                Err(e) => {
-                    tx.error(Error::internal(e.to_string())).await;
-                    break;
-                }
-            }
-        }
-    });
-
-    Ok(stream)
-}
-```
-
-### Macro generates
-
-```rust
-// Original function preserved
-pub async fn get_user(id: i64, ctx: Context) -> Result<User> { ... }
-
-// Dispatch wrapper
-#[doc(hidden)]
-pub async fn __zap_dispatch_get_user(
-    params: &[u8],
-    ctx: Context,
-) -> std::result::Result<Vec<u8>, zap::Error> {
-    #[derive(Deserialize)]
-    struct Params { id: i64 }
-
-    let p: Params = rmp_serde::from_slice(params)
-        .map_err(|e| zap::Error::invalid_params(e.to_string()))?;
-
-    let result = get_user(p.id, ctx).await?;
-
-    rmp_serde::to_vec(&result)
-        .map_err(|e| zap::Error::internal(e.to_string()))
-}
-
-// Static registry entry (no inventory crate)
-#[used]
-#[link_section = ".zap_exports"]
-static __ZAP_EXPORT_GET_USER: zap::ExportEntry = zap::ExportEntry {
-    name: "get_user",
-    is_async: true,
-    is_streaming: false,
-    dispatch: __zap_dispatch_get_user,
-    params_schema: r#"{"type":"object","properties":{"id":{"type":"integer"}},"required":["id"]}"#,
-    return_schema: r#"{"$ref":"User"}"#,
-};
-```
-
-No `inventory` crate. Static registry via linker section or explicit `&[ExportEntry]` array.
-
-### SDK types
-
-```rust
-// Context is request-scoped only. No infrastructure (db, etc).
-pub struct Context {
-    trace_id: u64,
-    span_id: u64,
-    headers: Headers,
-    auth: Option<Auth>,
-    cancel: CancellationToken,
-}
-
-impl Context {
-    pub fn trace_id(&self) -> u64;
-    pub fn span_id(&self) -> u64;
-    pub fn header(&self, name: &str) -> Option<&str>;
-    pub fn user_id(&self) -> Option<&str>;
-    pub fn has_role(&self, role: &str) -> bool;
-    pub fn is_cancelled(&self) -> bool;
-    pub fn cancellation_token(&self) -> CancellationToken;
-}
-
-pub struct Error {
-    code: ErrorCode,
-    message: String,
-    source: Option<Box<dyn std::error::Error + Send + Sync>>,
-}
-
-impl Error {
-    pub fn user(msg: impl Into<String>) -> Self;
-    pub fn not_found(msg: impl Into<String>) -> Self;
-    pub fn unauthorized() -> Self;
-    pub fn internal(msg: impl Into<String>) -> Self;
-    pub fn invalid_params(msg: impl Into<String>) -> Self;
-}
-
-impl<E: std::error::Error + Send + Sync + 'static> From<E> for Error {
-    fn from(e: E) -> Self {
-        Error::internal(e.to_string())
-    }
-}
-
-pub type Result<T> = std::result::Result<T, Error>;
-
-pub struct Stream<T> { ... }
-
-impl<T: Serialize> Stream<T> {
-    pub fn channel() -> (StreamSender<T>, Stream<T>);
-}
-
-impl<T: Serialize> StreamSender<T> {
-    pub async fn send(&self, item: T) -> Result<(), Error>;
-    pub async fn error(&self, err: Error);
-}
-```
-
-### Generated main.rs
-
-```rust
-mod lib;
-
-#[tokio::main]
-async fn main() {
-    // Worker initialization (user-defined)
-    lib::init().await;
-
-    // Run protocol loop
-    zap::runtime::run().await
-}
-```
-
-The `zap::runtime::run()` function:
-1. Reads `ZAP_SOCKET` from environment
-2. Connects to zap-rustd
-3. Sends Handshake{Worker} with export registry
-4. Enters message loop
-5. Dispatches Invoke to registered functions
-6. Handles Cancel and Shutdown
-
----
-
-## Supervision
-
-### Startup
-
-```
-1. zap starts
-2. zap detects server/Cargo.toml
-3. zap spawns zap-rustd --socket .zap/rustd.sock --worker ./server/target/release/server
-4. zap-rustd listens on socket
-5. zap-rustd spawns user-server with ZAP_SOCKET=.zap/worker.sock
-6. user-server connects, sends Handshake
-7. zap-rustd marks worker Ready
-8. zap connects to zap-rustd
-9. zap sends ListExports
-10. zap caches registry
-11. Ready
-```
-
-### Crash recovery
-
-```
-Worker crashes:
-1. zap-rustd detects exit/EOF
-2. In-flight requests get InvokeError{Panic}
-3. Restart with backoff: 0ms, 100ms, 500ms, 2s, 5s
-4. Max 10 attempts before circuit break
-5. Circuit break: return Unavailable for 30s
-
-zap-rustd crashes:
-1. zap detects socket EOF
-2. zap restarts zap-rustd
-3. All state rebuilt from scratch
-```
-
-### Timeouts
-
-```
-Two-level enforcement:
-
-1. zap-rustd:
-   - Starts timer on Invoke
-   - Fires: send Cancel to worker, send InvokeError{Timeout} to zap
-
-2. user-server:
-   - Wraps execution in tokio::time::timeout
-   - Cooperative cancellation via CancellationToken
-```
-
-### Concurrency
-
-```
-Limits (configurable):
-- max_concurrent_requests: 1024
-- max_concurrent_per_function: 100
-
-Backpressure:
-- Queue depth tracked
-- Over limit: InvokeError{Overloaded}
-```
-
----
-
-## Hot Reload
-
-```
-File change detected in server/src/**/*.rs
-          │
-          ▼
-    cargo build --release
-          │
-          ▼
-    Hash new binary
-          │
-    Different from current?
-          │
-          ▼ Yes
-    Spawn new worker (worker-new)
-          │
-          ▼
-    Wait for Handshake from worker-new
-          │
-          ▼
-    Validate exports compatible
-          │
-          ▼
-    Switch traffic: new requests → worker-new
-          │
-          ▼
-    Drain in-flight on worker-old (max 30s)
-          │
-          ▼
-    Send Shutdown to worker-old
-          │
-          ▼
-    Wait ShutdownAck (5s) or SIGTERM
-          │
-          ▼
-    If still alive after 5s, SIGKILL
-          │
-          ▼
-    Done
-```
-
-**Zero downtime**: New requests never wait. Old requests complete or timeout.
-
----
-
-## CLI
-
-### zap dev
-
-```typescript
-if (fs.existsSync('server/Cargo.toml')) {
-    // Build
-    await exec('cargo build --release', { cwd: 'server' });
-
-    // Start zap-rustd
-    spawn(rustdBinary, [
-        '--socket', '.zap/rustd.sock',
-        '--worker', 'server/target/release/server',
-        '--watch', 'server/src',
-    ]);
-
-    await waitForSocket('.zap/rustd.sock');
-
-    // Start zap
-    spawn(zapBinary, [
-        '--config', 'zap.config.json',
-        '--rustd-socket', '.zap/rustd.sock',
-    ]);
-}
-```
-
-### zap build
-
-```typescript
-if (fs.existsSync('server/Cargo.toml')) {
-    await exec('cargo build --release', { cwd: 'server' });
-    fs.copySync('server/target/release/server', 'dist/bin/server');
-}
-fs.copySync(zapBinary, 'dist/bin/zap');
-fs.copySync(rustdBinary, 'dist/bin/zap-rustd');
-```
-
-### zap serve
-
-```typescript
-if (fs.existsSync('dist/bin/server')) {
-    spawn('dist/bin/zap-rustd', [
-        '--socket', '/tmp/zap-rustd.sock',
-        '--worker', 'dist/bin/server',
-    ]);
-    await waitForSocket('/tmp/zap-rustd.sock');
-}
-
-spawn('dist/bin/zap', [
-    '--config', 'dist/config.json',
-    '--rustd-socket', '/tmp/zap-rustd.sock',
-]);
-```
-
----
-
-## TypeScript Codegen
-
-From ListExportsResult, generate:
-
-```typescript
-// src/generated/server.ts
-
-import { rpc } from '@zap-js/client';
-
-export interface User {
-    id: number;
-    name: string;
-}
-
-export async function getUser(id: number): Promise<User> {
-    return rpc.call('get_user', { id });
-}
-
-export function listUsers(): AsyncIterable<User> {
-    return rpc.stream('list_users', {});
+pub fn health_check() -> String {
+    "OK".to_string()
 }
 ```
 
 ---
 
-## Configuration
+## Key Files to Modify
 
-```json
-{
-  "rust": {
-    "enabled": true,
-    "serverDir": "server",
+### Phase 1: Context & Linkme
+- `packages/server/src/context.rs` (NEW)
+- `packages/server/src/registry.rs` (MODIFY: linkme, Context support)
+- `packages/server/internal/macros/src/lib.rs` (MODIFY: linkme, Context param detection)
+- `packages/server/src/splice_worker.rs` (MODIFY: construct Context, pass to dispatcher)
+- `packages/server/Cargo.toml` (MODIFY: remove inventory, add linkme)
+- `packages/server/internal/macros/Cargo.toml` (MODIFY: remove inventory, add linkme)
 
-    "runtime": {
-      "timeoutMs": 30000,
-      "maxConcurrency": 1024
-    },
+### Phase 2: CLI Integration
+- `packages/client/src/cli/utils/binary-resolver.ts` (MODIFY: add resolveSpliceBinary)
+- `packages/client/src/runtime/splice-manager.ts` (NEW)
+- `packages/client/src/cli/utils/user-server-builder.ts` (NEW)
+- `packages/client/src/dev-server/server.ts` (MODIFY: Splice integration)
+- `packages/client/src/cli/commands/build.ts` (MODIFY: cargo build, copy binaries)
+- `packages/client/src/cli/commands/serve.ts` (MODIFY: spawn Splice)
+- `packages/client/src/runtime/types.ts` (MODIFY: add splice_socket_path)
 
-    "supervisor": {
-      "maxRestarts": 10,
-      "restartBackoff": [0, 100, 500, 2000, 5000],
-      "healthCheckInterval": 5000,
-      "drainTimeout": 30000
-    }
-  }
-}
-```
-
----
-
-## File Layout
-
-### npm package
-
-```
-@zap-js/server/
-├── package.json
-├── index.js
-├── rust-sdk/
-│   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs
-│       ├── context.rs
-│       ├── error.rs
-│       ├── stream.rs
-│       └── runtime.rs
-└── rust-macros/
-    ├── Cargo.toml
-    └── src/
-        └── lib.rs
-```
-
-### Platform package
-
-```
-@zap-js/darwin-arm64/
-├── package.json
-└── bin/
-    ├── zap
-    ├── zap-rustd
-    └── zap-codegen
-```
-
-### User project
-
-```
-my-app/
-├── package.json
-├── zap.config.json
-├── src/
-│   ├── routes/
-│   └── generated/
-│       └── server.ts
-├── server/
-│   ├── Cargo.toml
-│   └── src/
-│       ├── main.rs
-│       └── lib.rs
-└── dist/
-    └── bin/
-        ├── zap
-        ├── zap-rustd
-        └── server
-```
-
----
-
-## Implementation
-
-### Phase 1: Protocol
-
-- [ ] Message types and codecs
-- [ ] Framing layer
-- [ ] Handshake flow
-- [ ] Invoke/Result/Error
-- [ ] Cancel
-- [ ] Streaming
-
-### Phase 2: zap-rustd
-
-- [ ] CLI and config
-- [ ] Socket server
-- [ ] Worker spawn/monitor
-- [ ] Crash recovery
-- [ ] Timeout enforcement
-- [ ] Concurrency limits
-- [ ] Health checks
-- [ ] Logging bridge
-
-### Phase 3: SDK
-
-- [ ] rust-sdk crate
-- [ ] rust-macros crate
-- [ ] Context type
-- [ ] Error type
-- [ ] Stream type
-- [ ] Runtime harness
-
-### Phase 4: Integration
-
-- [ ] zap --rustd-socket
-- [ ] RPC client in zap
-- [ ] Request forwarding
-- [ ] Response handling
-- [ ] Stream passthrough
-
-### Phase 5: CLI
-
-- [ ] zap dev rust mode
-- [ ] zap build rust mode
-- [ ] zap serve rust mode
-- [ ] zap doctor
-
-### Phase 6: Hot Reload
-
-- [ ] File watcher
-- [ ] Zero-downtime swap
-- [ ] Drain logic
-
-### Phase 7: Codegen
-
-- [ ] Parse ListExportsResult
-- [ ] Generate TypeScript
-- [ ] Generate types
-
----
-
-## Security Model
-
-The user-server runs as native code with the same privileges as the project. This is **trusted code**—no sandboxing, no capability restrictions.
-
-If sandboxing is required in the future, a WASM backend can be added as an alternative execution mode.
-
----
-
-## zap-rustd Structure
-
-Library + binary for testability and future embedding:
-
-```
-packages/server/
-├── zap-rustd/              # Library crate
-│   ├── Cargo.toml
-│   └── src/
-│       ├── lib.rs          # Public API
-│       ├── protocol.rs     # Message types, codecs
-│       ├── supervisor.rs   # Worker spawn, health, restart
-│       ├── router.rs       # Request dispatch, timeout
-│       ├── reload.rs       # Hot reload logic
-│       └── metrics.rs
-│
-└── zap-rustd-bin/          # Binary crate (thin wrapper)
-    ├── Cargo.toml
-    └── src/
-        └── main.rs         # CLI, calls into library
-```
-
-Benefits:
-- Integration tests against library
-- Embeddable in zap for future "single process mode"
-- Clean separation of concerns
+### Phase 3: Testing & Codegen
+- `tests/e2e/splice-integration/` (NEW: E2E test project)
+- `packages/client/src/codegen/splice.ts` (NEW: TypeScript generation)
 
 ---
 
 ## Success Criteria
 
-**Functional**
-- External users can write `#[zap::export]` functions
-- Full async Rust works (sqlx, reqwest, tokio)
-- TypeScript calls Rust seamlessly
-- Streaming works with backpressure
-- Cancellation works with strict semantics
+- [ ] Users can write `#[zap::export]` functions in server/ directory
+- [x] Functions work with pre-built npm binaries (no compilation of zap needed) ✅ linkme migration
+- [x] Context parameter provides access to trace_id, headers, auth ✅ Context wrapper API
+- [ ] `zap dev` automatically builds and runs user server via Splice
+- [ ] `zap build` packages user server and splice binaries
+- [ ] `zap serve` runs Splice in production
+- [x] Zero inventory dependency anywhere in codebase ✅ Removed from all packages
+- [ ] Full E2E test coverage (Phase 1: ✅ 83/83 tests passing, Phase 2/3: pending)
 
-**Performance**
-- p50 < 500μs IPC overhead (small payloads <1KB)
-- p99 < 2ms IPC overhead
-- Benchmark harness exists and is measured
+---
 
-**Reliability**
-- Worker crash doesn't crash zap
-- Automatic restart with backoff
-- Graceful drain on shutdown
-- Timeouts enforced at two levels
-- Terminal request states are strict
+## Notes
 
-**DX**
-- `npm create zap my-app -- --with-rust` works
-- `zap dev` auto-builds and hot-reloads
-- Clear error messages
-- `zap doctor` validates setup
+- **No separate SDK crate needed** - everything lives in `zap_server`
+- **RequestContext already exists** - just need to expose it
+- **Linkme works across compilation boundaries** - solves inventory problem
+- **Backward compatible** - functions without Context still work
+- **Graceful fallback** - if no server/Cargo.toml, everything still works (just no Rust functions)

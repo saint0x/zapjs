@@ -668,12 +668,13 @@ impl Zap {
 
             // Build dispatch function that forwards to Splice
             let splice_client = std::sync::Arc::new(tokio::sync::RwLock::new(splice_client));
-            std::sync::Arc::new(move |function_name: String, params: serde_json::Value| {
+            std::sync::Arc::new(move |function_name: String, params: serde_json::Value, _context: Option<crate::splice_worker::RequestContext>| {
                 let splice_client = splice_client.clone();
                 let function_name = function_name.clone();
                 let params = params.clone();
 
                 // Spawn async task and block on result (required by RpcDispatchFn signature)
+                // Note: Context is ignored here as Splice handles context internally
                 tokio::task::block_in_place(|| {
                     tokio::runtime::Handle::current().block_on(async move {
                         splice_client.read().await
@@ -681,7 +682,7 @@ impl Zap {
                             .await
                     })
                 })
-            }) as std::sync::Arc<dyn Fn(String, serde_json::Value) -> Result<serde_json::Value, String> + Send + Sync>
+            })
         } else {
             // Use inventory-based dispatcher (in-process functions)
             config.rpc_dispatch.unwrap_or_else(|| {

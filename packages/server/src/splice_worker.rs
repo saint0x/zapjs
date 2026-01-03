@@ -155,8 +155,8 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
                 let params_json: serde_json::Value = rmp_serde::from_slice(&params)
                     .unwrap_or_else(|_| serde_json::json!({}));
 
-                // Call function via dispatcher
-                let result = dispatcher(function_name.clone(), params_json);
+                // Call function via dispatcher with context
+                let result = dispatcher(function_name.clone(), params_json, Some(context));
 
                 let duration_us = start.elapsed().as_micros() as u64;
 
@@ -206,10 +206,12 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Collect exported functions from inventory
+/// Collect exported functions from linkme distributed slice
 fn collect_exports() -> Vec<ExportMetadata> {
-    inventory::iter::<ExportedFunction>
-        .into_iter()
+    use crate::registry::EXPORTS;
+
+    EXPORTS
+        .iter()
         .map(|f| ExportMetadata {
             name: f.name.to_string(),
             is_async: f.is_async,
