@@ -28,7 +28,7 @@ const PLATFORMS = {
   }
 };
 
-const BINARIES = ['zap', 'zap-codegen'];
+const BINARIES = ['zap', 'zap-codegen', 'splice'];
 
 function exec(cmd, opts = {}) {
   console.log(`  $ ${cmd}`);
